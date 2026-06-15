@@ -52,7 +52,6 @@ const _businessRouteMeta = {
   AppRoutes.businessDashboard: _RouteMeta('Dashboard', 0),
   AppRoutes.businessGuestEntry: _RouteMeta('Guest Entry', 1),
   AppRoutes.businessGuestRecord: _RouteMeta('Guest Records', 2),
-  AppRoutes.businessReports: _RouteMeta('Reports', 3),
   AppRoutes.businessMessages: _RouteMeta('Messages', 4),
   AppRoutes.businessProfile: _RouteMeta('Profile', 5),
 };
@@ -72,7 +71,6 @@ abstract final class _RoutePermissions {
     AppRoutes.businessDashboard: {'business'},
     AppRoutes.businessGuestEntry: {'business'},
     AppRoutes.businessGuestRecord: {'business'},
-    AppRoutes.businessReports: {'business'},
     AppRoutes.businessMessages: {'business'},
     AppRoutes.businessProfile: {'business'},
   };

@@ -12,7 +12,6 @@ abstract final class AppRoutes {
   static const businessDashboard = '/business/dashboard';
   static const businessGuestEntry = '/business/guest-entry';
   static const businessGuestRecord = '/business/guest-records';
-  static const businessReports = '/business/reports';
   static const businessMessages = '/business/messages';
   static const businessProfile = '/business/profile';
 }

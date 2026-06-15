@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
-import '../core/database/local_database.dart';
 import '../core/services/connectivity_service.dart';
 import 'base_api.dart';
 
@@ -16,16 +14,16 @@ enum MessageType {
   String get dbValue => name;
 
   String get label => switch (this) {
-        MessageType.compliance   => 'Compliance',
-        MessageType.announcement => 'Announcement',
-        MessageType.general      => 'General',
-      };
+    MessageType.compliance => 'Compliance',
+    MessageType.announcement => 'Announcement',
+    MessageType.general => 'General',
+  };
 
   String get icon => switch (this) {
-        MessageType.compliance   => '⚠️',
-        MessageType.announcement => '📣',
-        MessageType.general      => '💬',
-      };
+    MessageType.compliance => '⚠️',
+    MessageType.announcement => '📣',
+    MessageType.general => '💬',
+  };
 }
 
 /// Matches the `recipient_status` enum on `message_recipients`.
@@ -64,13 +62,15 @@ String buildOfficialMessageLetter({
     'November',
     'December',
   ];
-  final dateStr = '${months[current.month - 1]} ${current.day}, ${current.year}';
+  final dateStr =
+      '${months[current.month - 1]} ${current.day}, ${current.year}';
   final typeLabel = switch (messageType) {
     MessageType.compliance => 'COMPLIANCE NOTICE',
     MessageType.announcement => 'ANNOUNCEMENT',
     MessageType.general => 'GENERAL NOTICE',
   };
-  final ref = 'MSG-${DateTime.now().millisecondsSinceEpoch.toString().substring(4)}';
+  final ref =
+      'MSG-${DateTime.now().millisecondsSinceEpoch.toString().substring(4)}';
 
   return '''REPUBLIC OF THE PHILIPPINES
 CITY OF SAN PABLO
@@ -144,9 +144,9 @@ class BusinessSummary {
 
   factory BusinessSummary.fromJson(Map<String, dynamic> json) =>
       BusinessSummary(
-        id:     json['id']            as String,
-        name:   json['business_name'] as String,
-        status: json['status']        as String,
+        id: json['id'] as String,
+        name: json['business_name'] as String,
+        status: json['status'] as String,
       );
 }
 
@@ -164,29 +164,29 @@ class Message {
     this.senderName,
   });
 
-  final String      id;
-  final String      senderId;
+  final String id;
+  final String senderId;
   final MessageType messageType;
-  final String      subject;
-  final String      content;
-  final bool        isBroadcast;
-  final DateTime    createdAt;
-  final String?     senderName;
+  final String subject;
+  final String content;
+  final bool isBroadcast;
+  final DateTime createdAt;
+  final String? senderName;
 
   factory Message.fromJson(Map<String, dynamic> json) => Message(
-        id:          json['id']          as String,
-        senderId:    json['sender_id']   as String,
-        messageType: MessageType.values.firstWhere(
-          (e) => e.dbValue == json['message_type'],
-          orElse: () => MessageType.general,
-        ),
-        subject:     json['subject']     as String,
-        content:     json['content']     as String,
-        isBroadcast: json['is_broadcast'] == 1 || json['is_broadcast'] == true,
-        createdAt:   DateTime.parse(json['created_at'] as String),
-        senderName:  (json['sender'] as Map<String, dynamic>?)?['full_name']
-                         as String?,
-      );
+    id: json['id'] as String,
+    senderId: json['sender_id'] as String,
+    messageType: MessageType.values.firstWhere(
+      (e) => e.dbValue == json['message_type'],
+      orElse: () => MessageType.general,
+    ),
+    subject: json['subject'] as String,
+    content: json['content'] as String,
+    isBroadcast: json['is_broadcast'] == 1 || json['is_broadcast'] == true,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    senderName:
+        (json['sender'] as Map<String, dynamic>?)?['full_name'] as String?,
+  );
 }
 
 /// Represents a row from `message_recipients` joined with its parent message.
@@ -209,46 +209,46 @@ class InboxMessage {
     this.senderName,
   });
 
-  final String          recipientId;
-  final String          messageId;
-  final String          businessId;
+  final String recipientId;
+  final String messageId;
+  final String businessId;
   final RecipientStatus status;
-  final bool            isRead;
-  final DateTime        createdAt;
-  final DateTime?       readAt;
+  final bool isRead;
+  final DateTime createdAt;
+  final DateTime? readAt;
 
   final MessageType messageType;
-  final String      subject;
-  final String      content;
-  final bool        isBroadcast;
-  final DateTime    sentAt;
-  final String?     senderName;
+  final String subject;
+  final String content;
+  final bool isBroadcast;
+  final DateTime sentAt;
+  final String? senderName;
 
   factory InboxMessage.fromJson(Map<String, dynamic> json) {
     final msg = json['message'] as Map<String, dynamic>;
     return InboxMessage(
-      recipientId:  json['id']          as String,
-      messageId:    json['message_id']  as String,
-      businessId:   json['business_id'] as String,
+      recipientId: json['id'] as String,
+      messageId: json['message_id'] as String,
+      businessId: json['business_id'] as String,
       status: RecipientStatus.values.firstWhere(
         (e) => e.dbValue == json['status'],
         orElse: () => RecipientStatus.unread,
       ),
-      isRead:    json['is_read'] == 1 || json['is_read'] == true,
+      isRead: json['is_read'] == 1 || json['is_read'] == true,
       createdAt: DateTime.parse(json['created_at'] as String),
-      readAt:    json['read_at'] != null
-                     ? DateTime.parse(json['read_at'] as String)
-                     : null,
+      readAt: json['read_at'] != null
+          ? DateTime.parse(json['read_at'] as String)
+          : null,
       messageType: MessageType.values.firstWhere(
         (e) => e.dbValue == msg['message_type'],
         orElse: () => MessageType.general,
       ),
-      subject:     msg['subject']      as String,
-      content:     msg['content']      as String,
+      subject: msg['subject'] as String,
+      content: msg['content'] as String,
       isBroadcast: msg['is_broadcast'] == 1 || msg['is_broadcast'] == true,
-      sentAt:      DateTime.parse(msg['created_at'] as String),
-      senderName:  (msg['sender'] as Map<String, dynamic>?)?['full_name']
-                       as String?,
+      sentAt: DateTime.parse(msg['created_at'] as String),
+      senderName:
+          (msg['sender'] as Map<String, dynamic>?)?['full_name'] as String?,
     );
   }
 }
@@ -266,29 +266,29 @@ class DeliveryReceipt {
     this.readAt,
   });
 
-  final String          recipientId;
-  final String          businessId;
-  final String          businessName;
-  final String          businessStatus;
+  final String recipientId;
+  final String businessId;
+  final String businessName;
+  final String businessStatus;
   final RecipientStatus status;
-  final bool            isRead;
-  final DateTime?       readAt;
+  final bool isRead;
+  final DateTime? readAt;
 
   factory DeliveryReceipt.fromJson(Map<String, dynamic> json) {
     final biz = json['business'] as Map<String, dynamic>;
     return DeliveryReceipt(
-      recipientId:    json['id']          as String,
-      businessId:     json['business_id'] as String,
-      businessName:   biz['business_name'] as String,
-      businessStatus: biz['status']        as String,
+      recipientId: json['id'] as String,
+      businessId: json['business_id'] as String,
+      businessName: biz['business_name'] as String,
+      businessStatus: biz['status'] as String,
       status: RecipientStatus.values.firstWhere(
         (e) => e.dbValue == json['status'],
         orElse: () => RecipientStatus.unread,
       ),
       isRead: json['is_read'] == 1 || json['is_read'] == true,
       readAt: json['read_at'] != null
-                  ? DateTime.parse(json['read_at'] as String)
-                  : null,
+          ? DateTime.parse(json['read_at'] as String)
+          : null,
     );
   }
 }
@@ -308,43 +308,45 @@ class MessagesApi extends BaseApi {
   Future<List<BusinessSummary>> fetchEligibleBusinesses() async {
     final response = await get('/api/messages/eligible-businesses');
     final data = handleResponse(response) as List<dynamic>;
-    return data.map((b) => BusinessSummary.fromJson(b as Map<String, dynamic>)).toList();
+    return data
+        .map((b) => BusinessSummary.fromJson(b as Map<String, dynamic>))
+        .toList();
   }
 
   // ── Send ───────────────────────────────────────────────────────────────────
 
   Future<String> sendToSelected({
-    required String           senderId,
-    required List<String>     businessIds,
-    required MessageType      messageType,
-    required String           subject,
-    required String           content,
+    required String senderId,
+    required List<String> businessIds,
+    required MessageType messageType,
+    required String subject,
+    required String content,
   }) async {
     final response = await post('/api/messages/send-selected', {
       'businessIds': businessIds,
       'messageType': messageType.dbValue,
-      'subject':     subject,
-      'content':     content,
+      'subject': subject,
+      'content': content,
     });
     final data = handleResponse(response);
     return data['messageId'] as String;
   }
 
   Future<({String messageId, int recipientCount})> sendToAll({
-    required String      senderId,
+    required String senderId,
     required MessageType messageType,
-    required String      subject,
-    required String      content,
+    required String subject,
+    required String content,
   }) async {
     final response = await post('/api/messages/send-all', {
       'messageType': messageType.dbValue,
-      'subject':     subject,
-      'content':     content,
+      'subject': subject,
+      'content': content,
     });
     final data = handleResponse(response);
     return (
-      messageId:      data['messageId']      as String,
-      recipientCount: data['recipientCount'] as int
+      messageId: data['messageId'] as String,
+      recipientCount: data['recipientCount'] as int,
     );
   }
 
@@ -353,13 +355,17 @@ class MessagesApi extends BaseApi {
   Future<List<Message>> fetchSentByAdmin(String adminId) async {
     final response = await get('/api/messages/admin/outbox');
     final data = handleResponse(response) as List<dynamic>;
-    return data.map((m) => Message.fromJson(m as Map<String, dynamic>)).toList();
+    return data
+        .map((m) => Message.fromJson(m as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<DeliveryReceipt>> fetchDeliveryReport(String messageId) async {
     final response = await get('/api/messages/admin/report/$messageId');
     final data = handleResponse(response) as List<dynamic>;
-    return data.map((r) => DeliveryReceipt.fromJson(r as Map<String, dynamic>)).toList();
+    return data
+        .map((r) => DeliveryReceipt.fromJson(r as Map<String, dynamic>))
+        .toList();
   }
 
   // ── Business: Inbox ────────────────────────────────────────────────────────
@@ -368,80 +374,18 @@ class MessagesApi extends BaseApi {
     String businessId, {
     bool includeArchived = false,
   }) async {
-    if (ConnectivityService.instance.isOnline) {
-      try {
-        final response = await get('/api/messages/business/inbox?includeArchived=$includeArchived&businessId=$businessId');
-        final data = handleResponse(response) as List<dynamic>;
-        return data.map((r) => InboxMessage.fromJson(r as Map<String, dynamic>)).toList();
-      } catch (e) {
-        debugPrint('⚠️ fetchInbox: Online fetch failed ($e).');
-        rethrow; // Do not fall back to local if we are online
-      }
-    }
-
-    // Fallback to local SQLite ("mysql" as referred by user)
-    try {
-      final db = await LocalDatabase.instance.database;
-      final rows = await db.rawQuery('''
-        SELECT 
-          r.id, r.message_id, r.business_id, r.status, r.is_read, r.read_at, r.created_at,
-          m.sender_id, m.message_type, m.subject, m.content, m.is_broadcast, m.created_at as sent_at, m.sender_name
-        FROM ${LocalDatabase.tableMessageRecipients} r
-        JOIN ${LocalDatabase.tableLocalMessages} m ON r.message_id = m.id
-        WHERE r.business_id = ? 
-        ${includeArchived ? '' : "AND r.status != 'archived'"}
-        ORDER BY m.created_at DESC
-      ''', [businessId]);
-
-      return rows.map((row) {
-        return InboxMessage(
-          recipientId: row['id'] as String,
-          messageId:   row['message_id'] as String,
-          businessId:  row['business_id'] as String,
-          status: RecipientStatus.values.firstWhere(
-            (e) => e.dbValue == row['status'],
-            orElse: () => RecipientStatus.unread,
-          ),
-          isRead:    (row['is_read'] as int) == 1,
-          createdAt: DateTime.parse(row['created_at'] as String),
-          readAt:    row['read_at'] != null ? DateTime.parse(row['read_at'] as String) : null,
-          messageType: MessageType.values.firstWhere(
-            (e) => e.dbValue == row['message_type'],
-            orElse: () => MessageType.general,
-          ),
-          subject:     row['subject'] as String,
-          content:     row['content'] as String,
-          isBroadcast: (row['is_broadcast'] as int) == 1,
-          sentAt:      DateTime.parse(row['sent_at'] as String),
-          senderName:  row['sender_name'] as String?,
-        );
-      }).toList();
-    } catch (e) {
-      debugPrint('❌ fetchInbox (local) error: $e');
-      return [];
-    }
+    final response = await get(
+      '/api/messages/business/inbox?includeArchived=$includeArchived&businessId=$businessId',
+    );
+    final data = handleResponse(response) as List<dynamic>;
+    return data
+        .map((r) => InboxMessage.fromJson(r as Map<String, dynamic>))
+        .toList();
   }
 
   Future<int> fetchUnreadCount(String businessId) async {
-    if (ConnectivityService.instance.isOnline && hasToken) {
-      try {
-        final response = await get('/api/messages/business/unread-count');
-        return handleResponse(response) as int;
-      } catch (_) {}
-    }
-
-    // Local fallback
-    try {
-      final db = await LocalDatabase.instance.database;
-      final result = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM ${LocalDatabase.tableMessageRecipients} '
-        "WHERE business_id = ? AND status = 'unread'",
-        [businessId],
-      );
-      return Sqflite.firstIntValue(result) ?? 0;
-    } catch (_) {
-      return 0;
-    }
+    final response = await get('/api/messages/business/unread-count');
+    return handleResponse(response) as int;
   }
 
   // ── Business: Update State ─────────────────────────────────────────────────
@@ -453,7 +397,10 @@ class MessagesApi extends BaseApi {
   }
 
   Future<void> archive(String recipientId) async {
-    final response = await put('/api/messages/recipient/$recipientId/archive', {});
+    final response = await put(
+      '/api/messages/recipient/$recipientId/archive',
+      {},
+    );
     handleResponse(response);
     unawaited(MessageBadgeController.instance.refresh());
   }

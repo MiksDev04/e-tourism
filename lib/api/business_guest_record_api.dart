@@ -315,7 +315,9 @@ class BusinessGuestRecordApi extends BaseApi {
     required List<GuestBreakdownEntry> breakdowns,
   }) async {
     try {
+      final businessId = SessionService.instance.current?.businessId;
       final payload = {
+        'businessId':         businessId,
         'checkIn':            checkIn,
         'checkOut':           checkOut,
         'totalGuests':        totalGuests,

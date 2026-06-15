@@ -502,7 +502,7 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
       if (result.syncedToCloud) {
         _showSnackBar('Guest entry saved successfully!');
       } else {
-        // Either offline, or online but Supabase failed — record is safe locally.
+        // Either offline, or online but Cloud API failed — record is safe locally.
         _showSnackBar(
           ConnectivityService.instance.isOnline
               ? 'Entry saved — will sync in the background.'

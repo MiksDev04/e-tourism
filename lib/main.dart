@@ -31,42 +31,46 @@ void main() async {
   }
 
   // ── sqflite desktop init ───────────────────────────────────────────────────
-  // Required on Windows, Linux, and macOS. Mobile (Android/iOS) uses the
-  // default sqflite and does not need this.
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
 
+  // ── Step 1: Load connectivity + session ───────────────────────────────────
   await ConnectivityService.instance.startWatching();
-  SyncService.instance.listenForConnectivity();
+  final session = await SessionService.instance.loadAndCache();
+
+  // ── Step 2: Initialise SQLite BEFORE any sync can run ─────────────────────
+  // SyncService reads/writes SQLite the moment it detects connectivity, so the
+  // database must exist before we attach any listeners.
+  if (!kIsWeb) {
+    if (session?.role == 'business') {
+      await LocalDatabase.instance.database;
+      final dbPath = await LocalDatabase.instance.getDatabaseFilePath();
+      debugPrint('SQLite DB path: $dbPath');
+    } else {
+      debugPrint('Offline sync disabled for ${session?.role ?? 'guest'} role.');
+    }
+  } else {
+    debugPrint('Web platform: skipping local SQLite initialization.');
+  }
+
+  // ── Step 3: Attach lifecycle observer + periodic sync BEFORE listeners ─────
   WidgetsBinding.instance.addObserver(_AppLifecycleSyncObserver());
 
-  // ── Periodic Sync Trigger ──────────────────────────────────────────────────
   Timer.periodic(const Duration(minutes: 5), (_) {
     if (ConnectivityService.instance.isOnline) {
       SyncService.instance.sync();
     }
   });
 
-  final session = await SessionService.instance.loadAndCache();
+  // ── Step 4: Start connectivity listener (triggers immediate sync if online) ─
+  // listenForConnectivity() already handles the initial online check and fires
+  // _handleOnlineTransition → sync(). Do NOT call sync() again below — that
+  // creates a race condition where sync runs without a valid auth token.
+  SyncService.instance.listenForConnectivity();
 
-  // ── Offline infrastructure ─────────────────────────────────────────────────
-  if (!kIsWeb && session?.role == 'business') {
-    await LocalDatabase.instance.database;
-    final dbFilePath = await LocalDatabase.instance.getDatabaseFilePath();
-    debugPrint('SQLite DB file path: $dbFilePath');
-  } else if (!kIsWeb) {
-    debugPrint('Offline sync disabled for ${session?.role ?? 'guest'} role.');
-  } else {
-    debugPrint('Web platform detected: skipping local SQLite initialization.');
-  }
-
-  if (ConnectivityService.instance.isOnline && session?.role == 'business') {
-    debugPrint('🚀 main: triggering initial sync...');
-    SyncService.instance.sync();
-  }
-
+  // ── Step 5: Window constraints (desktop only) ──────────────────────────────
   if (!kIsWeb) {
     await windowManager.ensureInitialized();
     await windowManager.setMinimumSize(const Size(375, 500));

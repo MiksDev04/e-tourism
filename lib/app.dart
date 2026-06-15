@@ -88,20 +88,29 @@ class _SyncBannerOverlayState extends State<SyncBannerOverlay> {
       _currentState = state;
       switch (state.status) {
         case SyncStatus.syncing:
+          // Only show the banner if there are actually local items pending to be synced online.
+          _showBanner = state.pendingCount > 0;
+          _hideTimer?.cancel();
+          _hideTimer = null;
+          break;
+
         case SyncStatus.error:
-          // Keep banner visible until the state changes again.
-          _showBanner = true;
+          // If we were already showing the banner (pushed something) or have pending items.
+          if (_showBanner || state.pendingCount > 0) {
+            _showBanner = true;
+          }
           _hideTimer?.cancel();
           _hideTimer = null;
           break;
 
         case SyncStatus.synced:
-          // Show banner, then auto-hide after 3 seconds.
-          _showBanner = true;
-          _hideTimer?.cancel();
-          _hideTimer = Timer(const Duration(seconds: 3), () {
-            if (mounted) setState(() => _showBanner = false);
-          });
+          // Only show success snackbar if we were actually showing the "syncing" state.
+          if (_showBanner) {
+            _hideTimer?.cancel();
+            _hideTimer = Timer(const Duration(seconds: 3), () {
+              if (mounted) setState(() => _showBanner = false);
+            });
+          }
           break;
 
         case SyncStatus.idle:

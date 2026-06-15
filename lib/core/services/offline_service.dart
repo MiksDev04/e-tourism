@@ -148,12 +148,17 @@ class SyncService {
   }
 
   Map<String, String> get _headers {
-    final token = SessionService.instance.current?.token;
-    return {
+    final Map<String, String> h = {
       'Content-Type': 'application/json',
-      'x-api-key': dotenv.env['API_KEY'] ?? '',
-      if (token != null) 'Authorization': 'Bearer $token',
+      'x-api-key': dotenv.env['API_KEY'] ?? 'tourism_app_v2_secret_key_2026',
     };
+
+    final token = SessionService.instance.current?.token;
+    if (token != null && token.isNotEmpty) {
+      h['Authorization'] = 'Bearer $token';
+    }
+
+    return h;
   }
 
   final StreamController<SyncState> _controller =
@@ -166,99 +171,90 @@ class SyncService {
   static const _syncDelay = Duration(milliseconds: 500);
 
   void listenForConnectivity() {
-    ConnectivityService.instance.onConnectivityChanged.listen((isOnline) async {
-      final session = SessionService.instance.current;
-      if (session == null || session.role != 'business') return;
-
+    // 1. Listen for future changes
+    ConnectivityService.instance.onConnectivityChanged.listen((isOnline) {
       if (isOnline) {
-        // ── Auto-Cloud-Upgrade ──────────────────────────────────────────────
-        // If we are online but have no token, attempt to get one using stored password.
-        if (session.password != null) {
-          debugPrint(
-            '☁️ SyncService: Online detected. Refreshing token before sync...',
-          );
-          try {
-            final success = await LoginApi().backgroundAuth(
-              username: session.username ?? session.email,
-              password: session.password!,
-            );
-            if (success) {
-              debugPrint('✅ SyncService: Auto-auth successful.');
-            } else {
-              debugPrint('❌ SyncService: Auto-auth failed.');
-            }
-          } catch (e) {
-            debugPrint('⚠️ SyncService: Auto-auth error: $e');
-          }
-        }
-
-        try {
-          // Fetch profile and business to ensure SQLite has the business record
-          await _pullProfileAndBusiness();
-
-          final current = SessionService.instance.current;
-          String? businessId = current?.businessId;
-
-          if (businessId == null && current != null) {
-            final db = await LocalDatabase.instance.database;
-            final rows = await db.query(
-              LocalDatabase.tableLocalBusinesses,
-              where: 'profile_id = ?',
-              whereArgs: [current.userId],
-              limit: 1,
-            );
-            if (rows.isNotEmpty) {
-              businessId = rows.first['id'] as String?;
-            }
-          }
-
-          if (businessId != null) {
-            await _pullForBusiness(businessId);
-          }
-        } catch (e) {
-          debugPrint('⚠️ listenForConnectivity: initial pulls failed: $e');
-        }
-
-        await _clearOfflineSessionFlag();
-        // Give a small delay for the state to settle before full sync
-        Future.delayed(_syncDelay, sync);
+        _handleOnlineTransition();
       }
     });
+
+    // 2. Initial check: if already online, trigger sync immediately
+    if (ConnectivityService.instance.isOnline) {
+      _handleOnlineTransition();
+    }
+  }
+
+  Future<void> _handleOnlineTransition() async {
+    final session = SessionService.instance.current;
+
+    // Session not loaded yet — retry after a short delay.
+    if (session == null) {
+      debugPrint('⏳ _handleOnlineTransition: session not ready — retrying in 2s');
+      Future.delayed(const Duration(seconds: 2), _handleOnlineTransition);
+      return;
+    }
+
+    // Session loaded but not a business account — stop, no sync needed.
+    if (session.role != 'business') {
+      debugPrint('⏭ _handleOnlineTransition: skipped — role is ${session.role}');
+      return;
+    }
+
+    // ── Auto-Cloud-Upgrade ──────────────────────────────────────────────────
+    // If we are online but have no token, attempt to get one using stored password.
+    if (session.password != null &&
+        (session.token == null || session.isOfflineSession)) {
+      debugPrint(
+        '☁️ SyncService: Online detected. Refreshing token before sync...',
+      );
+      try {
+        await LoginApi().backgroundAuth(
+          username: session.username ?? session.email,
+          password: session.password!,
+        );
+      } catch (e) {
+        debugPrint('⚠️ SyncService: Auto-auth error: $e');
+      }
+    }
+
+    try {
+      // Fetch profile and business to ensure SQLite has the business record.
+      await _pullProfileAndBusiness();
+
+      final current = SessionService.instance.current;
+      String? businessId = current?.businessId;
+
+      if (businessId == null && current != null) {
+        final db = await LocalDatabase.instance.database;
+        final rows = await db.query(
+          LocalDatabase.tableLocalBusinesses,
+          where: 'profile_id = ?',
+          whereArgs: [current.userId],
+          limit: 1,
+        );
+        if (rows.isNotEmpty) {
+          businessId = rows.first['id'] as String?;
+        }
+      }
+
+      if (businessId != null) {
+        await _pullForBusiness(businessId);
+      }
+    } catch (e) {
+      debugPrint('⚠️ _handleOnlineTransition: initial pulls failed: $e');
+    }
+
+    await _clearOfflineSessionFlag();
+
+    // Give a small delay for state to settle before full sync.
+    Future.delayed(_syncDelay, sync);
   }
 
   Future<void> _clearOfflineSessionFlag() async {
     final current = SessionService.instance.current;
     if (current == null || !current.isOfflineSession) return;
 
-    final updated = SessionData(
-      userId: current.userId,
-      fullName: current.fullName,
-      username: current.username,
-      email: current.email,
-      phone: current.phone,
-      role: current.role,
-      isOfflineSession: false,
-      businessId: current.businessId,
-      businessName: current.businessName,
-      permitNumber: current.permitNumber,
-      registrationNumber: current.registrationNumber,
-      street: current.street,
-      totalRooms: current.totalRooms,
-      permitFileUrl: current.permitFileUrl,
-      validIdUrl: current.validIdUrl,
-      businessType: current.businessType,
-      status: current.status,
-      remarks: current.remarks,
-      region: current.region,
-      cityMunicipality: current.cityMunicipality,
-      province: current.province,
-      barangay: current.barangay,
-      tradename: current.tradename,
-      businessLine: current.businessLine,
-      ownerFirstName: current.ownerFirstName,
-      ownerLastName: current.ownerLastName,
-      ownerMiddleName: current.ownerMiddleName,
-    );
+    final updated = current.copyWith(isOfflineSession: false);
 
     await SessionService.instance.save(updated);
     await SessionService.instance.loadAndCache();
@@ -284,15 +280,14 @@ class SyncService {
       return;
     }
 
-    // Proceed with sync even if no token is available (the backend may allow it or BaseApi handles it)
-    _emit(const SyncState(status: SyncStatus.syncing));
+    final initialPending = await _countPending();
+    _emit(SyncState(status: SyncStatus.syncing, pendingCount: initialPending));
 
     try {
       await _pullProfileAndBusiness();
-      await _pushPendingCreates();
-      await _pushPendingUpdates();
-      await _pullFromBackend();
-      await _pullMessages(); // NEW
+      await _pushPendingCreates(); // POST  → /api/business/guest-entries
+      await _pushPendingUpdates(); // PUT   → /api/business/guest-records/:id
+      await _pullFromBackend();    // GET   → /api/business/guest-records
 
       final remaining = await _countPending();
       _emit(SyncState(status: SyncStatus.synced, pendingCount: remaining));
@@ -309,71 +304,12 @@ class SyncService {
 
   Future<int> getPendingCount() => _countPending();
 
-  Future<void> _pullMessages() async {
-    final current = SessionService.instance.current;
-    if (current == null || current.businessId == null) return;
-
-    final businessId = current.businessId!;
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/messages/business/inbox?includeArchived=true'),
-        headers: _headers,
-      );
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        final List<dynamic> rows = jsonDecode(response.body);
-        final db = await LocalDatabase.instance.database;
-
-        await db.transaction((txn) async {
-          for (final row in rows) {
-            final msg = row['message'] as Map<String, dynamic>;
-            final recipientId = row['id'] as String;
-            final messageId = row['message_id'] as String;
-
-            // 1. Insert message
-            await txn.insert(
-              LocalDatabase.tableLocalMessages,
-              {
-                'id': messageId,
-                'sender_id': msg['sender_id'],
-                'message_type': msg['message_type'],
-                'subject': msg['subject'],
-                'content': msg['content'],
-                'is_broadcast':
-                    (msg['is_broadcast'] == true || msg['is_broadcast'] == 1)
-                    ? 1
-                    : 0,
-                'created_at': msg['created_at'],
-                'sender_name': msg['sender']?['full_name'],
-              },
-              conflictAlgorithm: ConflictAlgorithm.replace,
-            );
-
-            // 2. Insert recipient entry
-            await txn.insert(
-              LocalDatabase.tableMessageRecipients,
-              {
-                'id': recipientId,
-                'message_id': messageId,
-                'business_id': businessId,
-                'status': row['status'],
-                'is_read': (row['is_read'] == true || row['is_read'] == 1)
-                    ? 1
-                    : 0,
-                'read_at': row['read_at'],
-                'created_at': row['created_at'],
-              },
-              conflictAlgorithm: ConflictAlgorithm.replace,
-            );
-          }
-        });
-        debugPrint('✅ _pullMessages: synced ${rows.length} messages');
-      }
-    } catch (e) {
-      debugPrint('⚠️ _pullMessages failed: $e');
-    }
-  }
-
+  // ---------------------------------------------------------------------------
+  // PUSH PENDING CREATES
+  // Uses POST /api/business/guest-entries so the backend treats them as new
+  // records. The saved UUID is forwarded as `id` so the cloud uses the same
+  // primary key that SQLite already has — avoiding duplicates on re-sync.
+  // ---------------------------------------------------------------------------
   Future<void> _pushPendingCreates() async {
     if (!await _canReachBackend()) {
       debugPrint('⏭ _pushPendingCreates: skipped — Backend unreachable');
@@ -388,6 +324,8 @@ class SyncService {
       whereArgs: [LocalDatabase.syncPendingCreate],
     );
 
+    debugPrint('📤 _pushPendingCreates: ${records.length} record(s) to push');
+
     for (final record in records) {
       final recordId = record['id'] as String;
 
@@ -398,6 +336,8 @@ class SyncService {
           whereArgs: [recordId],
         );
 
+        // Build payload and include the local UUID so the backend stores the
+        // same ID — keeps SQLite and MySQL in sync without a remapping step.
         final payload = _toApiPayload(record, breakdowns);
         payload['id'] = recordId;
 
@@ -417,33 +357,32 @@ class SyncService {
             where: 'id = ?',
             whereArgs: [recordId],
           );
-          debugPrint('✅ _pushPendingCreates: pushed $recordId');
+          debugPrint('✅ _pushPendingCreates: synced $recordId');
         } else if (response.statusCode == 401) {
           debugPrint(
             '🔐 _pushPendingCreates: 401 — token expired, refreshing and aborting for retry',
           );
-          final s = SessionService.instance.current;
-          if (s?.password != null) {
-            await LoginApi().backgroundAuth(
-              username: s!.username ?? s.email,
-              password: s.password!,
-            );
-          }
-          return; // Stop this batch — next sync will use the fresh token
+          await _tryRefreshToken();
+          return; // Stop batch — next sync will use the fresh token.
         } else {
           debugPrint(
-            '❌ _pushPendingCreates: failed for $recordId — ${response.body}',
+            '❌ _pushPendingCreates: failed for $recordId — '
+            '${response.statusCode} ${response.body}',
           );
         }
       } on SocketException catch (e) {
         debugPrint('🌐 _pushPendingCreates: network lost — aborting ($e)');
         return;
       } catch (e) {
-        debugPrint('❌ _pushPendingCreates: failed for $recordId — $e');
+        debugPrint('❌ _pushPendingCreates: exception for $recordId — $e');
       }
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // PUSH PENDING UPDATES
+  // Uses PUT /api/business/guest-records/:id (upsert semantics on the backend).
+  // ---------------------------------------------------------------------------
   Future<void> _pushPendingUpdates() async {
     if (!await _canReachBackend()) {
       debugPrint('⏭ _pushPendingUpdates: skipped — Backend unreachable');
@@ -457,6 +396,8 @@ class SyncService {
       where: 'sync_status = ?',
       whereArgs: [LocalDatabase.syncPendingUpdate],
     );
+
+    debugPrint('📤 _pushPendingUpdates: ${records.length} record(s) to push');
 
     for (final record in records) {
       final recordId = record['id'] as String;
@@ -486,33 +427,31 @@ class SyncService {
             where: 'id = ?',
             whereArgs: [recordId],
           );
-          debugPrint('✅ _pushPendingUpdates: pushed $recordId');
+          debugPrint('✅ _pushPendingUpdates: synced $recordId');
         } else if (response.statusCode == 401) {
           debugPrint(
             '🔐 _pushPendingUpdates: 401 — token expired, refreshing and aborting for retry',
           );
-          final s = SessionService.instance.current;
-          if (s?.password != null) {
-            await LoginApi().backgroundAuth(
-              username: s!.username ?? s.email,
-              password: s.password!,
-            );
-          }
+          await _tryRefreshToken();
           return;
         } else {
           debugPrint(
-            '❌ _pushPendingUpdates: failed for $recordId — ${response.body}',
+            '❌ _pushPendingUpdates: failed for $recordId — '
+            '${response.statusCode} ${response.body}',
           );
         }
       } on SocketException catch (e) {
         debugPrint('🌐 _pushPendingUpdates: network lost — aborting ($e)');
         return;
       } catch (e) {
-        debugPrint('❌ _pushPendingUpdates: failed for $recordId — $e');
+        debugPrint('❌ _pushPendingUpdates: exception for $recordId — $e');
       }
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // PULL FROM BACKEND
+  // ---------------------------------------------------------------------------
   Future<void> _pullFromBackend() async {
     if (!await _canReachBackend()) {
       debugPrint('⏭ _pullFromBackend: skipped — Backend unreachable');
@@ -539,9 +478,10 @@ class SyncService {
 
         if (response.statusCode >= 200 && response.statusCode < 300) {
           final remoteRecords = jsonDecode(response.body) as List<dynamic>;
-          final remoteIds = remoteRecords.map((r) => r['id'] as String).toSet();
+          final remoteIds =
+              remoteRecords.map((r) => r['id'] as String).toSet();
 
-          // 1. Prune local records that were deleted on the Cloud
+          // 1. Prune local synced records that no longer exist on the cloud.
           final localSynced = await db.query(
             LocalDatabase.tableGuestRecords,
             columns: ['id', 'local_updated_at'],
@@ -553,7 +493,8 @@ class SyncService {
           for (final local in localSynced) {
             final id = local['id'] as String;
             if (!remoteIds.contains(id)) {
-              // SAFETY: Don't prune if the record was updated/synced in the last 60 seconds.
+              // Grace period: skip recently-synced records to avoid a race
+              // where the POST just succeeded but the GET hasn't caught up yet.
               final localUpdatedAtStr = local['local_updated_at'] as String?;
               if (localUpdatedAtStr != null) {
                 final updatedAt = DateTime.tryParse(localUpdatedAtStr);
@@ -582,7 +523,7 @@ class SyncService {
             }
           }
 
-          // 2. Insert / Update from Cloud
+          // 2. Insert / Update records from cloud (skip any with pending changes).
           for (final remote in remoteRecords) {
             final recordId = remote['id'] as String;
 
@@ -608,7 +549,6 @@ class SyncService {
 
             final breakdowns =
                 remote['guest_breakdowns'] as List<dynamic>? ?? [];
-
             for (final b in breakdowns) {
               await db.insert(
                 LocalDatabase.tableGuestBreakdowns,
@@ -622,7 +562,9 @@ class SyncService {
         debugPrint('🌐 _pullFromBackend: network lost — aborting ($e)');
         return;
       } catch (e) {
-        debugPrint('❌ _pullFromBackend: failed for business $businessId — $e');
+        debugPrint(
+          '❌ _pullFromBackend: failed for business $businessId — $e',
+        );
       }
     }
   }
@@ -735,8 +677,8 @@ class SyncService {
             whereArgs: [recordId],
           );
 
-          final breakdowns = remote['guest_breakdowns'] as List<dynamic>? ?? [];
-
+          final breakdowns =
+              remote['guest_breakdowns'] as List<dynamic>? ?? [];
           for (final b in breakdowns) {
             await db.insert(
               LocalDatabase.tableGuestBreakdowns,
@@ -748,14 +690,43 @@ class SyncService {
       }
     } on SocketException catch (e) {
       debugPrint('🌐 _pullForBusiness: network lost — aborting ($e)');
-      return;
     } catch (e) {
       debugPrint('❌ _pullForBusiness: failed for business $businessId — $e');
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  /// Attempts a background re-auth and, on success, schedules a fresh sync.
+  Future<void> _tryRefreshToken() async {
+    final s = SessionService.instance.current;
+    if (s?.password == null) return;
+
+    try {
+      final success = await LoginApi().backgroundAuth(
+        username: s!.username ?? s.email,
+        password: s.password!,
+      );
+      if (success) {
+        Future.delayed(const Duration(seconds: 1), sync);
+      }
+    } catch (e) {
+      debugPrint('⚠️ _tryRefreshToken: $e');
+    }
+  }
+
   Future<bool> _canReachBackend() async {
-    return ConnectivityService.instance.isOnline;
+    if (!ConnectivityService.instance.isOnline) return false;
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/health'), headers: _headers)
+          .timeout(const Duration(seconds: 4));
+      return response.statusCode < 500;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<int> _countPending() async {
@@ -777,6 +748,12 @@ class SyncService {
     _controller.add(state);
   }
 
+  // ---------------------------------------------------------------------------
+  // Payload Mappers
+  // ---------------------------------------------------------------------------
+
+  /// Converts a SQLite row + its breakdowns into the JSON body expected by
+  /// both POST /api/business/guest-entries and PUT /api/business/guest-records/:id.
   Map<String, dynamic> _toApiPayload(
     Map<String, dynamic> record,
     List<Map<String, dynamic>> breakdowns,
