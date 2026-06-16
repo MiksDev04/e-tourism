@@ -143,13 +143,56 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
   // ── Change Password flow ──────────────────────────────────────────────────────
 
   Future<void> _startChangePasswordFlow() async {
-    _showSnackbar('Change Password is temporarily unavailable while we update our security systems.', isError: true);
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _OtpModal(
+        api: _api,
+        title: 'Verify Identity',
+        subtitle: 'A 6-digit code was sent to your email. Enter it below to change your password.',
+        onSendOtp: (api) => api.sendPasswordChangeOtp(),
+        onVerifyOtp: (api, otp) => api.verifyPasswordChangeOtp(otp: otp),
+        onVerified: (otp) {
+          Navigator.of(context).pop();
+          _openResetPasswordModal(otp);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openResetPasswordModal(String otp) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _ChangePasswordModal(
+        api: _api,
+        otp: otp,
+        onSuccess: () {
+          Navigator.of(context).pop();
+          _showSnackbar('Password updated successfully!');
+        },
+      ),
+    );
   }
 
   // ── Change Email flow ─────────────────────────────────────────────────────────
 
   Future<void> _startChangeEmailFlow() async {
-    _showSnackbar('Change Email is temporarily unavailable while we update our security systems.', isError: true);
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _OtpModal(
+        api: _api,
+        title: 'Verify Identity',
+        subtitle: 'A 6-digit code was sent to your current email to authorize changing your address.',
+        onSendOtp: (api) => api.sendEmailChangeOtp(),
+        onVerifyOtp: (api, otp) => api.verifyEmailChangeOtp(otp: otp),
+        onVerified: (otp) {
+          Navigator.of(context).pop();
+          _openEmailModal(otp);
+        },
+      ),
+    );
   }
 
   Future<void> _openEmailModal(String otp) async {
@@ -744,9 +787,14 @@ class _OtpModalState extends State<_OtpModal> {
 // ─── Modal: Change Password ───────────────────────────────────────────────────
 
 class _ChangePasswordModal extends StatefulWidget {
-  const _ChangePasswordModal({required this.api, required this.onSuccess});
+  const _ChangePasswordModal({
+    required this.api,
+    required this.otp,
+    required this.onSuccess,
+  });
 
   final AdminProfileApi api;
+  final String otp;
   final VoidCallback onSuccess;
 
   @override
@@ -754,11 +802,9 @@ class _ChangePasswordModal extends StatefulWidget {
 }
 
 class _ChangePasswordModalState extends State<_ChangePasswordModal> {
-  final _oldPassCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
 
-  bool _obscureOld = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _loading = false;
@@ -766,7 +812,6 @@ class _ChangePasswordModalState extends State<_ChangePasswordModal> {
 
   @override
   void dispose() {
-    _oldPassCtrl.dispose();
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
     super.dispose();
@@ -779,7 +824,7 @@ class _ChangePasswordModalState extends State<_ChangePasswordModal> {
     });
     try {
       await widget.api.updatePassword(
-        oldPassword: _oldPassCtrl.text,
+        otp: widget.otp,
         newPassword: _newPassCtrl.text,
         confirmPassword: _confirmPassCtrl.text,
       );
@@ -823,18 +868,6 @@ class _ChangePasswordModalState extends State<_ChangePasswordModal> {
                         'Identity verified. Enter your new password below.',
                   ),
                   const Divider(color: AppColors.cardBorder, height: 28),
-                  _ModalField(
-                    label: 'Current Password',
-                    icon: Icons.lock_outline_rounded,
-                    child: _PasswordField(
-                      controller: _oldPassCtrl,
-                      obscure: _obscureOld,
-                      hint: 'Enter your current password',
-                      onToggle: () =>
-                          setState(() => _obscureOld = !_obscureOld),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   _ModalField(
                     label: 'New Password',
                     icon: Icons.lock_open_outlined,

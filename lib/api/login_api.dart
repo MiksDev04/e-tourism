@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:app/core/services/session_service.dart';
 import 'package:app/core/services/connectivity_service.dart';
-import 'package:app/core/services/offline_service.dart' hide ConnectivityService;
+import 'package:app/core/services/offline_service.dart'
+    hide ConnectivityService;
 import 'package:app/core/database/local_database.dart';
 import 'base_api.dart';
 
@@ -46,7 +47,7 @@ class LoginApi extends BaseApi {
 
       final data = jsonDecode(response.body);
       final user = data['user'];
-      final biz  = data['business'];
+      final biz = data['business'];
       final token = data['token'];
 
       final current = SessionService.instance.current;
@@ -97,8 +98,26 @@ class LoginApi extends BaseApi {
     await SessionService.instance.clear();
 
     // ── OFFLINE ATTEMPT ──────────────────────────────────────────────────────
-if (!await ConnectivityService.instance.isOnlineAsync) {
+    if (!await ConnectivityService.instance.isOnlineAsync) {
       try {
+        final db = await LocalDatabase.instance.database;
+
+        // 1. First, check if this is a known admin trying to login offline.
+        // Admins are NOT allowed to login offline, regardless of password.
+        final adminCheck = await db.query(
+          LocalDatabase.tableLocalProfiles,
+          where: '(username = ? OR email = ?) AND role = ?',
+          whereArgs: [username, username, 'admin'],
+          limit: 1,
+        );
+
+        if (adminCheck.isNotEmpty) {
+          return LoginResult.err(
+            'Admin login requires an internet connection. Please connect to the internet to sign in.',
+          );
+        }
+
+        // 2. Otherwise, attempt to verify business user credentials.
         final profile = await OfflineAuthService.instance.verifyOfflineLogin(
           username: username,
           password: password,
@@ -109,12 +128,15 @@ if (!await ConnectivityService.instance.isOnlineAsync) {
         }
 
         final roleStr = profile['role'] as String? ?? 'business';
+        // Redundant but safe: check role again
         if (roleStr == 'admin') {
-          return LoginResult.err('Admin login is only supported online.');
+          return LoginResult.err(
+            'Admin login is only supported online. Please connect to the internet to sign in.',
+          );
         }
 
         // Load business data
-        final db = await LocalDatabase.instance.database;
+        await LocalDatabase.instance.database;
         final bizRows = await db.query(
           LocalDatabase.tableLocalBusinesses,
           where: 'profile_id = ?',
@@ -147,7 +169,8 @@ if (!await ConnectivityService.instance.isOnlineAsync) {
           barangay: biz?['barangay'] as String?,
           tradename: biz?['tradename'] as String?,
           businessLine: biz?['business_line'] is String
-              ? (jsonDecode(biz!['business_line'] as String) as List).cast<String>()
+              ? (jsonDecode(biz!['business_line'] as String) as List)
+                    .cast<String>()
               : null,
           ownerFirstName: biz?['owner_first_name'] as String?,
           ownerLastName: biz?['owner_last_name'] as String?,
@@ -195,7 +218,9 @@ if (!await ConnectivityService.instance.isOnlineAsync) {
         permitNumber: biz?['permit_number'],
         registrationNumber: biz?['registration_number'],
         street: biz?['street'],
-        totalRooms: biz?['total_rooms'] != null ? int.tryParse(biz!['total_rooms'].toString()) : null,
+        totalRooms: biz?['total_rooms'] != null
+            ? int.tryParse(biz!['total_rooms'].toString())
+            : null,
         permitFileUrl: biz?['permit_file_url'],
         validIdUrl: biz?['valid_id_url'],
         businessType: biz?['business_type'],
@@ -206,7 +231,7 @@ if (!await ConnectivityService.instance.isOnlineAsync) {
         province: biz?['province'],
         barangay: biz?['barangay'],
         tradename: biz?['tradename'],
-        businessLine: biz?['business_line'] is String 
+        businessLine: biz?['business_line'] is String
             ? (jsonDecode(biz!['business_line']) as List).cast<String>()
             : (biz?['business_line'] as List?)?.cast<String>(),
         ownerFirstName: biz?['owner_first_name'],
@@ -215,18 +240,16 @@ if (!await ConnectivityService.instance.isOnlineAsync) {
       );
 
       // Cache for future offline login
-      if (role == Role.business) {
-        await OfflineAuthService.instance.cacheProfile(
-          id: user['id'].toString(),
-          username: user['username'],
-          password: password,
-          fullName: user['full_name'],
-          email: user['email'],
-          phone: user['phone'],
-          role: user['role'],
-          business: biz,
-        );
-      }
+      await OfflineAuthService.instance.cacheProfile(
+        id: user['id'].toString(),
+        username: user['username'],
+        password: password,
+        fullName: user['full_name'],
+        email: user['email'],
+        phone: user['phone'],
+        role: user['role'],
+        business: biz,
+      );
 
       await SessionService.instance.save(session);
       await SessionService.instance.loadAndCache();
@@ -246,7 +269,9 @@ if (!await ConnectivityService.instance.isOnlineAsync) {
 
   Future<String> sendForgotPasswordOtp({required String email}) async {
     try {
-      final response = await post('/api/auth/forgot-password', {'email': email});
+      final response = await post('/api/auth/forgot-password', {
+        'email': email,
+      });
       handleResponse(response);
       return email.trim().toLowerCase();
     } on ApiException catch (e) {
@@ -279,7 +304,7 @@ if (!await ConnectivityService.instance.isOnlineAsync) {
 
   Future<void> resetPassword({
     required String email, // Need email from previous step
-    required String otp,   // Need OTP from previous step
+    required String otp, // Need OTP from previous step
     required String newPassword,
     required String confirmPassword,
   }) async {

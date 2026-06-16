@@ -2,7 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import 'package:app/api/login_api.dart';
+import 'package:app/core/services/connectivity_service.dart';
 import '../../../router/app_routes.dart';
 import '../../../core/constants/app_colors.dart';
 
@@ -153,9 +155,21 @@ class _LoginCardState extends State<_LoginCard> {
   String? _errorMessage;
 
   final _api = LoginApi();
+  bool _isOnline = true;
+  StreamSubscription<bool>? _connectivitySub;
+
+  @override
+  void initState() {
+    super.initState();
+    _isOnline = ConnectivityService.instance.isOnline;
+    _connectivitySub = ConnectivityService.instance.onConnectivityChanged.listen((online) {
+      if (mounted) setState(() => _isOnline = online);
+    });
+  }
 
   @override
   void dispose() {
+    _connectivitySub?.cancel();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -274,6 +288,7 @@ class _LoginCardState extends State<_LoginCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+
           const Text(
             'Sign In',
             style: TextStyle(
@@ -300,17 +315,18 @@ class _LoginCardState extends State<_LoginCard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const _FieldLabel(label: 'Password'),
-              GestureDetector(
-                onTap: _startForgotPasswordFlow,
-                child: const Text(
-                  'Forgot Password?',
-                  style: TextStyle(
-                    color: AppColors.primaryCyan,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+              if (_isOnline)
+                GestureDetector(
+                  onTap: _startForgotPasswordFlow,
+                  child: const Text(
+                    'Forgot Password?',
+                    style: TextStyle(
+                      color: AppColors.primaryCyan,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -321,7 +337,8 @@ class _LoginCardState extends State<_LoginCard> {
                 setState(() => _obscurePassword = !_obscurePassword),
           ),
 
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
+
 
           // Error banner
           if (_errorMessage != null) ...[
@@ -351,6 +368,7 @@ class _LoginCardState extends State<_LoginCard> {
           _isLoading
               ? const _LoadingButton()
               : _SignInButton(onPressed: _handleSignIn),
+
           const SizedBox(height: 16),
 
           Center(

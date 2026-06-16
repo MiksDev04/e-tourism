@@ -114,68 +114,89 @@ class BusinessProfileApi extends BaseApi {
   }
 
   Future<void> sendPasswordChangeOtp() async {
-    final email = (await fetchProfile()).email;
     try {
-      await post('/api/auth/forgot-password', {'email': email});
+      final response = await post('/api/send-email-otp', {});
+      handleResponse(response);
     } on ApiException catch (e) {
       throw ProfileApiException(e.message);
     }
   }
-Future<void> verifyPasswordChangeOtp({required String otp}) async {
-  final email = (await fetchProfile()).email;
-  try {
-    await post('/api/auth/verify-otp', {'email': email, 'otp': otp});
-  } on ApiException catch (e) {
-    throw ProfileApiException(e.message);
-  }
-}
 
-Future<void> sendEmailChangeOtp() async {
-  try {
-    await post('/api/profile/send-email-otp', {});
-  } on ApiException catch (e) {
-    throw ProfileApiException(e.message);
+  Future<void> verifyPasswordChangeOtp({required String otp}) async {
+    try {
+      final profile = await fetchProfile();
+      final response = await post('/api/auth/verify-otp', {
+        'email': profile.email,
+        'otp': otp,
+      });
+      handleResponse(response);
+    } on ApiException catch (e) {
+      throw ProfileApiException(e.message);
+    }
   }
-}
 
-Future<void> verifyEmailChangeOtp({required String otp}) async {
-  final email = (await fetchProfile()).email;
-  try {
-    await post('/api/auth/verify-otp', {'email': email, 'otp': otp});
-  } on ApiException catch (e) {
-    throw ProfileApiException(e.message);
+  Future<void> sendEmailChangeOtp() async {
+    try {
+      final response = await post('/api/send-email-otp', {});
+      handleResponse(response);
+    } on ApiException catch (e) {
+      throw ProfileApiException(e.message);
+    }
   }
-}
 
-Future<void> updateEmail({required String newEmail, String? otp}) async {
-  try {
-    await put('/api/profile/update-email', {
-      'new_email': newEmail,
-      'otp': otp ?? '',
-    });
-  } on ApiException catch (e) {
-    throw ProfileApiException(e.message);
+  Future<void> verifyEmailChangeOtp({required String otp}) async {
+    try {
+      final profile = await fetchProfile();
+      final response = await post('/api/auth/verify-otp', {
+        'email': profile.email,
+        'otp': otp,
+      });
+      handleResponse(response);
+    } on ApiException catch (e) {
+      throw ProfileApiException(e.message);
+    }
   }
-}
 
-Future<void> verifyOldPassword({required String oldPassword}) async {
-    // Verified during updatePassword in final step
+  Future<void> updateEmail({required String newEmail, required String otp}) async {
+    try {
+      final response = await put('/api/update-email', {
+        'new_email': newEmail,
+        'otp': otp,
+      });
+      handleResponse(response);
+    } on ApiException catch (e) {
+      throw ProfileApiException(e.message);
+    }
   }
 
   Future<void> updatePassword({
     required String newPassword,
     required String confirmPassword,
+    String? otp,
     String? oldPassword,
   }) async {
-    if (newPassword != confirmPassword) throw const ProfileApiException('Passwords do not match.');
+    if (newPassword != confirmPassword) {
+      throw const ProfileApiException('Passwords do not match.');
+    }
     try {
-      if (oldPassword != null) {
-        await post('/api/profile/change-password', {
+      if (otp != null) {
+        // OTP-based reset (logged in)
+        final profile = await fetchProfile();
+        final response = await post('/api/auth/reset-password', {
+          'email': profile.email,
+          'otp': otp,
+          'new_password': newPassword,
+        });
+        handleResponse(response);
+      } else if (oldPassword != null) {
+        // Traditional change with old password
+        final response = await post('/api/change-password', {
           'old_password': oldPassword,
           'new_password': newPassword,
         });
+        handleResponse(response);
       } else {
-        // Handle OTP reset if needed
+        throw const ProfileApiException('Verification required to change password.');
       }
     } on ApiException catch (e) {
       throw ProfileApiException(e.message);

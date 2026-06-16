@@ -45,13 +45,8 @@ class AdminProfileApi extends BaseApi {
   // ────────────────────────────────────────────────────────────────────────────
 
   Future<void> sendPasswordChangeOtp() async {
-    // In the new backend, we don't necessarily need OTP for logged-in password change
-    // if we verify the old password. But the UI expects a 3-step flow.
-    // To maintain the flow, we can use the forgot-password OTP logic even for logged-in users.
-    // Or we can simplify the UI. For now, let's just use the forgot-password logic.
-    final email = (await fetchProfile()).email;
     try {
-      final response = await post('/api/auth/forgot-password', {'email': email});
+      final response = await post('/api/send-email-otp', {});
       handleResponse(response);
     } on ApiException catch (e) {
       throw ProfileApiException(e.message);
@@ -59,44 +54,11 @@ class AdminProfileApi extends BaseApi {
   }
 
   Future<void> verifyPasswordChangeOtp({required String otp}) async {
-    final email = (await fetchProfile()).email;
     try {
-      final response = await post('/api/auth/verify-otp', {'email': email, 'otp': otp});
-      handleResponse(response);
-    } on ApiException catch (e) {
-      throw ProfileApiException(e.message);
-    }
-  }
-
-  Future<void> sendEmailChangeOtp() async {
-    try {
-      final response = await post('/api/profile/send-email-otp', {});
-      handleResponse(response);
-    } on ApiException catch (e) {
-      throw ProfileApiException(e.message);
-    }
-  }
-
-  Future<void> verifyEmailChangeOtp({required String otp}) async {
-    // Identity verification step for email change
-    try {
-      // In this backend, OTP verification is done during update-email.
-      // But UI wants a separate step. We'll just verify it against a dummy endpoint or use verify-otp.
-      // The forgot-password verify-otp actually works for any reset_otp.
-      final email = (await fetchProfile()).email;
-      final response = await post('/api/auth/verify-otp', {'email': email, 'otp': otp});
-      handleResponse(response);
-    } on ApiException catch (e) {
-      throw ProfileApiException(e.message);
-    }
-  }
-
-  Future<void> updateEmail({required String newEmail, String? otp}) async {
-    try {
-      // If we have an OTP from previous step, use the update-email endpoint
-      final response = await put('/api/profile/update-email', {
-        'new_email': newEmail,
-        'otp': otp ?? '', // UI should have verified this or pass it along
+      final profile = await fetchProfile();
+      final response = await post('/api/auth/verify-otp', {
+        'email': profile.email,
+        'otp': otp,
       });
       handleResponse(response);
     } on ApiException catch (e) {
@@ -104,37 +66,71 @@ class AdminProfileApi extends BaseApi {
     }
   }
 
-  Future<void> verifyOldPassword({required String oldPassword}) async {
-    // The new backend /change-password endpoint verifies old password.
-    // We can just store it for the final call or do a dummy check here.
-    // Actually, it's better to verify it now if we want to follow the 3-step UI.
-    // But we don't have a standalone "verify-password" endpoint.
-    // Let's just assume it's checked in the final step.
-  }
-
   Future<void> updatePassword({
     required String newPassword,
     required String confirmPassword,
-    String? oldPassword, // Optional if we used OTP
+    String? otp,
+    String? oldPassword,
   }) async {
     if (newPassword != confirmPassword) {
       throw const ProfileApiException('Passwords do not match.');
     }
     try {
-      // If we have oldPassword, use the /change-password endpoint
-      if (oldPassword != null) {
-        final response = await post('/api/profile/change-password', {
+      if (otp != null) {
+        final profile = await fetchProfile();
+        final response = await post('/api/auth/reset-password', {
+          'email': profile.email,
+          'otp': otp,
+          'new_password': newPassword,
+        });
+        handleResponse(response);
+      } else if (oldPassword != null) {
+        final response = await post('/api/change-password', {
           'old_password': oldPassword,
           'new_password': newPassword,
         });
         handleResponse(response);
       } else {
-        // If we used OTP, we use /api/auth/reset-password
-        final email = (await fetchProfile()).email;
-        // We'd need the OTP here too... this is getting complex because of the 3-step UI.
-        // Let's stick to the simplest path that works.
-        // I'll update the UI to be simpler or add what's missing.
+        throw const ProfileApiException('Verification required to change password.');
       }
+    } on ApiException catch (e) {
+      throw ProfileApiException(e.message);
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  //  4. CHANGE EMAIL
+  // ────────────────────────────────────────────────────────────────────────────
+
+  Future<void> sendEmailChangeOtp() async {
+    try {
+      final response = await post('/api/send-email-otp', {});
+      handleResponse(response);
+    } on ApiException catch (e) {
+      throw ProfileApiException(e.message);
+    }
+  }
+
+  Future<void> verifyEmailChangeOtp({required String otp}) async {
+    try {
+      final profile = await fetchProfile();
+      final response = await post('/api/auth/verify-otp', {
+        'email': profile.email,
+        'otp': otp,
+      });
+      handleResponse(response);
+    } on ApiException catch (e) {
+      throw ProfileApiException(e.message);
+    }
+  }
+
+  Future<void> updateEmail({required String newEmail, required String otp}) async {
+    try {
+      final response = await put('/api/update-email', {
+        'new_email': newEmail,
+        'otp': otp,
+      });
+      handleResponse(response);
     } on ApiException catch (e) {
       throw ProfileApiException(e.message);
     }

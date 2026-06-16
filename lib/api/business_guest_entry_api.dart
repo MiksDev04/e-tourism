@@ -274,6 +274,7 @@ class BusinessGuestEntryApi extends BaseApi {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    debugPrint('💾 SQLite: saved record $recordId (status: $syncStatus, business: $businessId)');
   }
 
   Future<void> _upsertLocalBreakdowns(

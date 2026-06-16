@@ -12,6 +12,95 @@ import '../widgets/offline_state.dart';
 import '../../../api/business_profile_api.dart';
 import '../../../api/login_api.dart';
 
+// ─── Fixed San Pablo location values ──────────────────────────────────────────
+
+const _fixedCityMunicipality = 'San Pablo City';
+const _fixedProvince = 'Laguna';
+const _fixedRegion = 'Region IV-A';
+
+const _sanPabloBarangays = <String>[
+  'Atisan',
+  'Bagong Bayan II-A',
+  'Bagong Pook VI-C',
+  'Barangay I-A',
+  'Barangay I-B',
+  'Barangay II-A',
+  'Barangay II-B',
+  'Barangay II-C',
+  'Barangay II-D',
+  'Barangay II-E',
+  'Barangay II-F',
+  'Barangay III-A',
+  'Barangay III-B',
+  'Barangay III-C',
+  'Barangay III-D',
+  'Barangay III-E',
+  'Barangay III-F',
+  'Barangay IV-A',
+  'Barangay IV-B',
+  'Barangay IV-C',
+  'Barangay V-A',
+  'Barangay V-B',
+  'Barangay V-C',
+  'Barangay V-D',
+  'Barangay VI-A',
+  'Barangay VI-B',
+  'Barangay VI-D',
+  'Barangay VI-E',
+  'Barangay VII-A',
+  'Barangay VII-B',
+  'Barangay VII-C',
+  'Barangay VII-D',
+  'Barangay VII-E',
+  'Bautista',
+  'Concepcion',
+  'Del Remedio',
+  'Dolores',
+  'San Antonio 1',
+  'San Antonio 2',
+  'San Bartolome',
+  'San Buenaventura',
+  'San Crispin',
+  'San Cristobal',
+  'San Diego',
+  'San Francisco',
+  'San Gabriel',
+  'San Gregorio',
+  'San Ignacio',
+  'San Isidro',
+  'San Joaquin',
+  'San Jose',
+  'San Juan',
+  'San Lorenzo',
+  'San Lucas 1',
+  'San Lucas 2',
+  'San Marcos',
+  'San Mateo',
+  'San Miguel',
+  'San Nicolas',
+  'San Pedro',
+  'San Rafael',
+  'San Roque',
+  'San Vicente',
+  'Santa Ana',
+  'Santa Catalina',
+  'Santa Cruz',
+  'Santa Elena',
+  'Santa Felomina',
+  'Santa Isabel',
+  'Santa Maria',
+  'Santa Maria Magdalena',
+  'Santa Monica',
+  'Santa Veronica',
+  'Santiago I',
+  'Santiago II',
+  'Santisimo Rosario',
+  'Santo Angel',
+  'Santo Cristo',
+  'Santo Niño',
+  'Soledad',
+];
+
 // ─── Business Profile Page ────────────────────────────────────────────────────
 
 class BusinessProfilePage extends StatefulWidget {
@@ -58,9 +147,10 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
   final _permitNumberCtrl    = TextEditingController();
   final _registrationCtrl    = TextEditingController();
 
-  // ── Business dropdowns ────────────────────────────────────────────────────
+  // ── Business selection ────────────────────────────────────────────────────
   BusinessType _selectedBusinessType = BusinessType.sole_proprietorship;
   List<BusinessLine> _selectedLines  = [BusinessLine.hotel];
+  String? _selectedBarangay;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -190,16 +280,27 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
     _ownerLastCtrl.text    = b.ownerLastName ?? '';
     _totalRoomsCtrl.text   = b.totalRooms.toString();
     _streetCtrl.text       = b.street ?? '';
+    
+    // Fixed location values
     _barangayCtrl.text     = b.barangay ?? '';
-    _cityCtrl.text         = b.cityMunicipality ?? '';
-    _provinceCtrl.text     = b.province ?? '';
-    _regionCtrl.text       = b.region ?? '';
+    _cityCtrl.text         = _fixedCityMunicipality;
+    _provinceCtrl.text     = _fixedProvince;
+    _regionCtrl.text       = _fixedRegion;
+
     _permitNumberCtrl.text = b.permitNumber ?? '';
     _registrationCtrl.text = b.registrationNumber ?? '';
     setState(() {
       _selectedBusinessType = b.businessType;
       _selectedLines        = b.businessLine.isNotEmpty
           ? b.businessLine : [BusinessLine.hotel];
+
+      // Handle barangay selection
+      if (_sanPabloBarangays.contains(b.barangay)) {
+        _selectedBarangay = b.barangay;
+      } else if (_sanPabloBarangays.isNotEmpty) {
+        _selectedBarangay = _sanPabloBarangays.first;
+        _barangayCtrl.text = _selectedBarangay!;
+      }
     });
   }
 
@@ -244,10 +345,10 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
         businessLine:       _selectedLines,
         totalRooms:         int.tryParse(_totalRoomsCtrl.text) ?? 0,
         street:             _streetCtrl.text,
-        barangay:           _barangayCtrl.text,
-        cityMunicipality:   _cityCtrl.text,
-        province:           _provinceCtrl.text,
-        region:             _regionCtrl.text,
+        barangay:           _selectedBarangay ?? _barangayCtrl.text,
+        cityMunicipality:   _fixedCityMunicipality,
+        province:           _fixedProvince,
+        region:             _fixedRegion,
         permitNumber:       _permitNumberCtrl.text,
         registrationNumber: _registrationCtrl.text,
       );
@@ -366,6 +467,11 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
                                 onSave:    _saveBusinessInfo,
                                 isNarrow:  isNarrow,
                                 hasRecord: _business != null,
+                                selectedBarangay: _selectedBarangay,
+                                onBarangayChanged: (v) => setState(() {
+                                  _selectedBarangay = v;
+                                  if (v != null) _barangayCtrl.text = v;
+                                }),
                               ),
                             ],
                           ),
@@ -549,7 +655,10 @@ class _AccountInfoCard extends StatelessWidget {
           _LabeledField(
             label: 'Email',
             icon: Icons.mail_outline_rounded,
-            child: _ReadonlyField(controller: emailCtrl),
+            child: _ReadonlyField(
+              controller: emailCtrl,
+              tooltip: 'Use "Change Email" in Security to update',
+            ),
           ),
           const SizedBox(height: 14),
           _LabeledField(
@@ -702,6 +811,8 @@ class _BusinessInfoCard extends StatelessWidget {
     required this.onSave,
     required this.isNarrow,
     required this.hasRecord,
+    required this.selectedBarangay,
+    required this.onBarangayChanged,
   });
 
   final TextEditingController businessNameCtrl, tradenameCtrl;
@@ -718,6 +829,8 @@ class _BusinessInfoCard extends StatelessWidget {
   final VoidCallback onSave;
   final bool isNarrow;
   final bool hasRecord;
+  final String? selectedBarangay;
+  final ValueChanged<String?> onBarangayChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -833,32 +946,46 @@ class _BusinessInfoCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           if (isNarrow) ...[
-            _LabeledField(label: 'Barangay',
-                child: _InputField(controller: barangayCtrl)),
+            _LabeledField(
+              label: 'Barangay',
+              child: _EnumDropdown<String?>(
+                value: selectedBarangay,
+                items: _sanPabloBarangays,
+                labelOf: (e) => e ?? '',
+                onChanged: onBarangayChanged,
+              ),
+            ),
             const SizedBox(height: 14),
             _LabeledField(label: 'City / Municipality',
-                child: _InputField(controller: cityCtrl)),
+                child: _ReadonlyField(controller: cityCtrl)),
             const SizedBox(height: 14),
             _LabeledField(label: 'Province',
-                child: _InputField(controller: provinceCtrl)),
+                child: _ReadonlyField(controller: provinceCtrl)),
             const SizedBox(height: 14),
             _LabeledField(label: 'Region',
-                child: _InputField(controller: regionCtrl)),
+                child: _ReadonlyField(controller: regionCtrl)),
           ] else ...[
             Row(children: [
-              Expanded(child: _LabeledField(label: 'Barangay',
-                  child: _InputField(controller: barangayCtrl))),
+              Expanded(child: _LabeledField(
+                label: 'Barangay',
+                child: _EnumDropdown<String?>(
+                  value: selectedBarangay,
+                  items: _sanPabloBarangays,
+                  labelOf: (e) => e ?? '',
+                  onChanged: onBarangayChanged,
+                ),
+              )),
               const SizedBox(width: 14),
               Expanded(child: _LabeledField(label: 'City / Municipality',
-                  child: _InputField(controller: cityCtrl))),
+                  child: _ReadonlyField(controller: cityCtrl))),
             ]),
             const SizedBox(height: 14),
             Row(children: [
               Expanded(child: _LabeledField(label: 'Province',
-                  child: _InputField(controller: provinceCtrl))),
+                  child: _ReadonlyField(controller: provinceCtrl))),
               const SizedBox(width: 14),
               Expanded(child: _LabeledField(label: 'Region',
-                  child: _InputField(controller: regionCtrl))),
+                  child: _ReadonlyField(controller: regionCtrl))),
             ]),
           ],
           const SizedBox(height: 20),
@@ -973,16 +1100,15 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
   int _step = 1;
   bool _loading  = false;
   String? _error;
+  String? _verifiedOtp;
 
   final List<TextEditingController> _pinCtrl =
       List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _pinFocus =
       List.generate(6, (_) => FocusNode());
 
-  final _oldPassCtrl  = TextEditingController();
   final _newPassCtrl  = TextEditingController();
   final _confPassCtrl = TextEditingController();
-  bool _obscureOld  = true;
   bool _obscureNew  = true;
   bool _obscureConf = true;
 
@@ -990,7 +1116,6 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
   void dispose() {
     for (final c in _pinCtrl)  c.dispose();
     for (final f in _pinFocus) f.dispose();
-    _oldPassCtrl.dispose();
     _newPassCtrl.dispose();
     _confPassCtrl.dispose();
     super.dispose();
@@ -1017,7 +1142,11 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
     try {
       await widget.api.verifyPasswordChangeOtp(otp: otp);
       if (!mounted) return;
-      setState(() { _loading = false; _step = 3; });
+      setState(() { 
+        _loading = false; 
+        _step = 3; 
+        _verifiedOtp = otp;
+      });
     } on ProfileApiException catch (e) {
       if (!mounted) return;
       // Map ambiguous backend messages (e.g. "expired") to a clearer
@@ -1031,10 +1160,11 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
   }
 
   Future<void> _submitPassword() async {
+    if (_verifiedOtp == null) return;
     setState(() { _loading = true; _error = null; });
     try {
-      await widget.api.verifyOldPassword(oldPassword: _oldPassCtrl.text);
       await widget.api.updatePassword(
+        otp:             _verifiedOtp,
         newPassword:     _newPassCtrl.text,
         confirmPassword: _confPassCtrl.text,
       );
@@ -1080,13 +1210,10 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
           },
         ),
         _ => _StepNewPassword(
-          oldPassCtrl:  _oldPassCtrl,
           newPassCtrl:  _newPassCtrl,
           confPassCtrl: _confPassCtrl,
-          obscureOld:   _obscureOld,
           obscureNew:   _obscureNew,
           obscureConf:  _obscureConf,
-          onToggleOld:  () => setState(() => _obscureOld  = !_obscureOld),
           onToggleNew:  () => setState(() => _obscureNew  = !_obscureNew),
           onToggleConf: () => setState(() => _obscureConf = !_obscureConf),
           loading:  _loading,
@@ -1119,6 +1246,7 @@ class _EmailChangeDialogState extends State<_EmailChangeDialog> {
   int _step = 1;
   bool _loading = false;
   String? _error;
+  String? _verifiedOtp;
 
   final List<TextEditingController> _pinCtrl =
       List.generate(6, (_) => TextEditingController());
@@ -1156,7 +1284,11 @@ class _EmailChangeDialogState extends State<_EmailChangeDialog> {
     try {
       await widget.api.verifyEmailChangeOtp(otp: otp);
       if (!mounted) return;
-      setState(() { _loading = false; _step = 3; });
+      setState(() { 
+        _loading = false; 
+        _step = 3; 
+        _verifiedOtp = otp;
+      });
     } on ProfileApiException catch (e) {
       if (!mounted) return;
       // Map ambiguous backend messages (e.g. "expired") to a clearer
@@ -1170,9 +1302,13 @@ class _EmailChangeDialogState extends State<_EmailChangeDialog> {
   }
 
   Future<void> _submitEmail() async {
+    if (_verifiedOtp == null) return;
     setState(() { _loading = true; _error = null; });
     try {
-      await widget.api.updateEmail(newEmail: _newEmailCtrl.text);
+      await widget.api.updateEmail(
+        newEmail: _newEmailCtrl.text,
+        otp:      _verifiedOtp!,
+      );
       final newEmail = _newEmailCtrl.text.trim().toLowerCase();
       widget.onSuccess(newEmail);
       if (mounted) {
@@ -1518,13 +1654,10 @@ class _StepVerifyOtpState extends State<_StepVerifyOtp> {
 
 class _StepNewPassword extends StatelessWidget {
   const _StepNewPassword({
-    required this.oldPassCtrl,
     required this.newPassCtrl,
     required this.confPassCtrl,
-    required this.obscureOld,
     required this.obscureNew,
     required this.obscureConf,
-    required this.onToggleOld,
     required this.onToggleNew,
     required this.onToggleConf,
     required this.loading,
@@ -1532,9 +1665,9 @@ class _StepNewPassword extends StatelessWidget {
     required this.onSubmit,
   });
 
-  final TextEditingController oldPassCtrl, newPassCtrl, confPassCtrl;
-  final bool obscureOld, obscureNew, obscureConf, loading;
-  final VoidCallback onToggleOld, onToggleNew, onToggleConf, onSubmit;
+  final TextEditingController newPassCtrl, confPassCtrl;
+  final bool obscureNew, obscureConf, loading;
+  final VoidCallback onToggleNew, onToggleConf, onSubmit;
   final String? error;
 
   @override
@@ -1542,14 +1675,6 @@ class _StepNewPassword extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _LabeledField(
-          label: 'Current Password',
-          child: _PasswordField(
-              controller: oldPassCtrl,
-              obscure: obscureOld,
-              onToggle: onToggleOld),
-        ),
-        const SizedBox(height: 14),
         _LabeledField(
           label: 'New Password',
           child: _PasswordField(
@@ -1751,8 +1876,9 @@ class _InputField extends StatelessWidget {
 // ─── Readonly Field ───────────────────────────────────────────────────────────
 
 class _ReadonlyField extends StatelessWidget {
-  const _ReadonlyField({required this.controller});
+  const _ReadonlyField({required this.controller, this.tooltip});
   final TextEditingController controller;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -1761,11 +1887,13 @@ class _ReadonlyField extends StatelessWidget {
       readOnly: true,
       style: const TextStyle(color: AppColors.textGray, fontSize: 13.5),
       decoration: _inputDeco().copyWith(
-        suffixIcon: const Tooltip(
-          message: 'Use "Change Email" in Security to update',
-          child: Icon(Icons.info_outline_rounded,
-              color: AppColors.textGray, size: 16),
-        ),
+        suffixIcon: tooltip != null
+            ? Tooltip(
+                message: tooltip!,
+                child: const Icon(Icons.info_outline_rounded,
+                    color: AppColors.textGray, size: 16),
+              )
+            : null,
       ),
     );
   }

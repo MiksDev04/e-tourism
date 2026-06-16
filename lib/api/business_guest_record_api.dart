@@ -206,11 +206,17 @@ class BusinessGuestRecordApi extends BaseApi {
       final now = DateTime.now().toUtc();
       final graceThreshold = now.subtract(const Duration(minutes: 2)).toIso8601String();
 
+      final allLocalCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM ${LocalDatabase.tableGuestRecords}'));
+      
       final rows = await db.query(
         LocalDatabase.tableGuestRecords,
         where: 'business_id = ? AND is_deleted = 0 AND (sync_status != ? OR local_updated_at > ?)',
         whereArgs: [businessId, LocalDatabase.syncSynced, graceThreshold],
       );
+      
+      if (rows.isEmpty && (allLocalCount ?? 0) > 0) {
+        debugPrint('🔍 _getMergedLocalRecords: No matches found for biz $businessId, but DB has $allLocalCount total records.');
+      }
 
       final records = <GuestRecord>[];
       for (final row in rows) {

@@ -37,47 +37,59 @@ class OfflineAuthService {
     final hash = _hashPassword(password, id);
 
     await db.transaction((txn) async {
-      await txn.insert(
+      final profileData = {
+        'id': id,
+        'username': username,
+        'full_name': fullName,
+        'email': email,
+        'phone': phone,
+        'role': role,
+        'password_hash': hash,
+      };
+      
+      final pCount = await txn.update(
         LocalDatabase.tableLocalProfiles,
-        {
-          'id': id,
-          'username': username,
-          'full_name': fullName,
-          'email': email,
-          'phone': phone,
-          'role': role,
-          'password_hash': hash,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        profileData,
+        where: 'id = ?',
+        whereArgs: [id],
       );
+      if (pCount == 0) {
+        await txn.insert(LocalDatabase.tableLocalProfiles, profileData);
+      }
 
       if (business != null) {
-        await txn.insert(
+        final bizData = {
+          'id': business['id'],
+          'profile_id': id,
+          'business_name': business['business_name'],
+          'status': business['status'],
+          'permit_number': business['permit_number'],
+          'registration_number': business['registration_number'],
+          'street': business['street'],
+          'total_rooms': business['total_rooms'],
+          'region': business['region'],
+          'city_municipality': business['city_municipality'],
+          'province': business['province'],
+          'barangay': business['barangay'],
+          'tradename': business['tradename'],
+          'business_line': business['business_line'] is String
+              ? business['business_line']
+              : jsonEncode(business['business_line']),
+          'owner_first_name': business['owner_first_name'],
+          'owner_last_name': business['owner_last_name'],
+          'owner_middle_name': business['owner_middle_name'],
+          'business_type': business['business_type'],
+        };
+
+        final bCount = await txn.update(
           LocalDatabase.tableLocalBusinesses,
-          {
-            'id': business['id'],
-            'profile_id': id,
-            'business_name': business['business_name'],
-            'status': business['status'],
-            'permit_number': business['permit_number'],
-            'registration_number': business['registration_number'],
-            'street': business['street'],
-            'total_rooms': business['total_rooms'],
-            'region': business['region'],
-            'city_municipality': business['city_municipality'],
-            'province': business['province'],
-            'barangay': business['barangay'],
-            'tradename': business['tradename'],
-            'business_line': business['business_line'] is String
-                ? business['business_line']
-                : jsonEncode(business['business_line']),
-            'owner_first_name': business['owner_first_name'],
-            'owner_last_name': business['owner_last_name'],
-            'owner_middle_name': business['owner_middle_name'],
-            'business_type': business['business_type'],
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
+          bizData,
+          where: 'id = ?',
+          whereArgs: [business['id']],
         );
+        if (bCount == 0) {
+          await txn.insert(LocalDatabase.tableLocalBusinesses, bizData);
+        }
       }
     });
   }
@@ -90,8 +102,8 @@ class OfflineAuthService {
 
     final rows = await db.query(
       LocalDatabase.tableLocalProfiles,
-      where: 'username = ?',
-      whereArgs: [username],
+      where: 'username = ? OR email = ?',
+      whereArgs: [username, username],
       limit: 1,
     );
 
@@ -281,6 +293,7 @@ class SyncService {
     }
 
     final initialPending = await _countPending();
+    debugPrint('🔄 sync: starting sync process. Initial pending count: $initialPending');
     _emit(SyncState(status: SyncStatus.syncing, pendingCount: initialPending));
 
     try {
@@ -324,7 +337,9 @@ class SyncService {
       whereArgs: [LocalDatabase.syncPendingCreate],
     );
 
-    debugPrint('📤 _pushPendingCreates: ${records.length} record(s) to push');
+    if (records.isNotEmpty) {
+      debugPrint('📤 _pushPendingCreates: ${records.length} record(s) to push');
+    }
 
     for (final record in records) {
       final recordId = record['id'] as String;
@@ -397,7 +412,9 @@ class SyncService {
       whereArgs: [LocalDatabase.syncPendingUpdate],
     );
 
-    debugPrint('📤 _pushPendingUpdates: ${records.length} record(s) to push');
+    if (records.isNotEmpty) {
+      debugPrint('📤 _pushPendingUpdates: ${records.length} record(s) to push');
+    }
 
     for (final record in records) {
       final recordId = record['id'] as String;
@@ -533,7 +550,10 @@ class SyncService {
               whereArgs: [recordId, LocalDatabase.syncSynced],
               limit: 1,
             );
-            if (pending.isNotEmpty) continue;
+            if (pending.isNotEmpty) {
+              debugPrint('⏳ _pullFromBackend: skipping cloud record $recordId (has local pending changes)');
+              continue;
+            }
 
             await db.insert(
               LocalDatabase.tableGuestRecords,
@@ -586,48 +606,58 @@ class SyncService {
         final db = await LocalDatabase.instance.database;
 
         if (user != null) {
-          await db.insert(
+          final data = {
+            'id': user['id'],
+            'username': user['username'],
+            'full_name': user['full_name'],
+            'email': user['email'],
+            'phone': user['phone'],
+            'role': user['role'],
+            'password_hash': 'sync_dummy_hash',
+          };
+          final count = await db.update(
             LocalDatabase.tableLocalProfiles,
-            {
-              'id': user['id'],
-              'username': user['username'],
-              'full_name': user['full_name'],
-              'email': user['email'],
-              'phone': user['phone'],
-              'role': user['role'],
-              'password_hash': 'sync_dummy_hash',
-            },
-            conflictAlgorithm: ConflictAlgorithm.ignore,
+            data,
+            where: 'id = ?',
+            whereArgs: [user['id']],
           );
+          if (count == 0) {
+            await db.insert(LocalDatabase.tableLocalProfiles, data);
+          }
         }
 
         if (biz != null) {
-          await db.insert(
+          final data = {
+            'id': biz['id'],
+            'profile_id': biz['user_id'] ?? user['id'],
+            'business_name': biz['business_name'],
+            'permit_number': biz['permit_number'],
+            'registration_number': biz['registration_number'],
+            'street': biz['street'],
+            'total_rooms': biz['total_rooms'],
+            'status': biz['status'],
+            'region': biz['region'],
+            'city_municipality': biz['city_municipality'],
+            'province': biz['province'],
+            'barangay': biz['barangay'],
+            'tradename': biz['tradename'],
+            'business_line': biz['business_line'] is String
+                ? biz['business_line']
+                : jsonEncode(biz['business_line']),
+            'owner_first_name': biz['owner_first_name'],
+            'owner_last_name': biz['owner_last_name'],
+            'owner_middle_name': biz['owner_middle_name'],
+            'business_type': biz['business_type'],
+          };
+          final count = await db.update(
             LocalDatabase.tableLocalBusinesses,
-            {
-              'id': biz['id'],
-              'profile_id': biz['user_id'] ?? user['id'],
-              'business_name': biz['business_name'],
-              'permit_number': biz['permit_number'],
-              'registration_number': biz['registration_number'],
-              'street': biz['street'],
-              'total_rooms': biz['total_rooms'],
-              'status': biz['status'],
-              'region': biz['region'],
-              'city_municipality': biz['city_municipality'],
-              'province': biz['province'],
-              'barangay': biz['barangay'],
-              'tradename': biz['tradename'],
-              'business_line': biz['business_line'] is String
-                  ? biz['business_line']
-                  : jsonEncode(biz['business_line']),
-              'owner_first_name': biz['owner_first_name'],
-              'owner_last_name': biz['owner_last_name'],
-              'owner_middle_name': biz['owner_middle_name'],
-              'business_type': biz['business_type'],
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace,
+            data,
+            where: 'id = ?',
+            whereArgs: [biz['id']],
           );
+          if (count == 0) {
+            await db.insert(LocalDatabase.tableLocalBusinesses, data);
+          }
         }
       }
     } catch (e) {
@@ -663,7 +693,10 @@ class SyncService {
             whereArgs: [recordId, LocalDatabase.syncSynced],
             limit: 1,
           );
-          if (pending.isNotEmpty) continue;
+          if (pending.isNotEmpty) {
+            debugPrint('⏳ _pullForBusiness: skipping cloud record $recordId (has local pending changes)');
+            continue;
+          }
 
           await db.insert(
             LocalDatabase.tableGuestRecords,

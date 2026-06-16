@@ -25,15 +25,13 @@ class LocalDatabase {
   static const String _kDbName = 'tourism_local.db';
 
   // ── schema version ─────────────────────────────────────────────────────────
-  static const int _kDbVersion = 2;
+  static const int _kDbVersion = 1;
 
   // ── table names ────────────────────────────────────────────────────────────
   static const String tableLocalProfiles   = 'local_profiles';
   static const String tableLocalBusinesses = 'local_businesses';
   static const String tableGuestRecords    = 'local_guest_records';
   static const String tableGuestBreakdowns = 'local_guest_breakdowns';
-  static const String tableLocalMessages   = 'local_messages';
-  static const String tableMessageRecipients = 'local_message_recipients';
 
   // ── sync status constants ──────────────────────────────────────────────────
   /// Record exists on Backend and matches local copy.
@@ -60,6 +58,7 @@ class LocalDatabase {
       version: _kDbVersion,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
+      onDowngrade: onDatabaseDowngradeDelete,
       // Enforce foreign-key constraints on every connection.
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
     );
@@ -79,23 +78,16 @@ class LocalDatabase {
       await txn.execute(_sqlCreateLocalBusinesses);
       await txn.execute(_sqlCreateGuestRecords);
       await txn.execute(_sqlCreateGuestBreakdowns);
-      await txn.execute(_sqlCreateLocalMessages);
-      await txn.execute(_sqlCreateMessageRecipients);
 
       await txn.execute(_sqlIndexGuestRecordsBusiness);
       await txn.execute(_sqlIndexGuestBreakdownsRecord);
       await txn.execute(_sqlIndexGuestRecordsSyncStatus);
-      await txn.execute(_sqlIndexMessagesRecipientsBusiness);
     });
   }
 
   // ── onUpgrade — add migration blocks here for future versions ─────────────
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      await db.execute(_sqlCreateLocalMessages);
-      await db.execute(_sqlCreateMessageRecipients);
-      await db.execute(_sqlIndexMessagesRecipientsBusiness);
-    }
+    // Migration logic for future versions goes here.
   }
 
   // ── helper: close (mainly for tests) ──────────────────────────────────────
@@ -202,35 +194,6 @@ class LocalDatabase {
     )
   ''';
 
-  /// Cached messages sent by admin.
-  static const String _sqlCreateLocalMessages = '''
-    CREATE TABLE $tableLocalMessages (
-      id           TEXT PRIMARY KEY,
-      sender_id    TEXT NOT NULL,
-      message_type TEXT NOT NULL,
-      subject      TEXT NOT NULL,
-      content      TEXT NOT NULL,
-      is_broadcast INTEGER NOT NULL DEFAULT 0,
-      created_at   TEXT NOT NULL,
-      sender_name  TEXT
-    )
-  ''';
-
-  /// Map of messages to business recipients.
-  static const String _sqlCreateMessageRecipients = '''
-    CREATE TABLE $tableMessageRecipients (
-      id          TEXT PRIMARY KEY,
-      message_id  TEXT NOT NULL,
-      business_id TEXT NOT NULL,
-      status      TEXT NOT NULL DEFAULT 'unread',
-      is_read     INTEGER NOT NULL DEFAULT 0,
-      read_at     TEXT,
-      created_at  TEXT NOT NULL,
-      FOREIGN KEY (message_id) REFERENCES $tableLocalMessages (id)
-        ON DELETE CASCADE
-    )
-  ''';
-
   // ---------------------------------------------------------------------------
   // SQL — indexes
   // ---------------------------------------------------------------------------
@@ -251,11 +214,5 @@ class LocalDatabase {
   static const String _sqlIndexGuestRecordsSyncStatus = '''
     CREATE INDEX idx_guest_records_sync_status
       ON $tableGuestRecords (sync_status)
-  ''';
-
-  /// Fast look-up of messages for a business.
-  static const String _sqlIndexMessagesRecipientsBusiness = '''
-    CREATE INDEX idx_message_recipients_business_id
-      ON $tableMessageRecipients (business_id)
   ''';
 }
