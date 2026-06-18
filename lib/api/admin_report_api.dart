@@ -16,6 +16,9 @@ class GeneratedReport {
     required this.periodMonth,
     required this.periodYear,
     required this.generatedAt,
+    this.batchId,
+    this.businessId,
+    this.businessName,
     this.fileUrl,
     this.generatedBy,
     this.sheetOptions,
@@ -25,6 +28,9 @@ class GeneratedReport {
   final String reportType;
   final int periodMonth;
   final int periodYear;
+  final String? batchId;
+  final String? businessId;
+  final String? businessName;
   final String? fileUrl;
   final DateTime generatedAt;
   final String? generatedBy;
@@ -60,9 +66,12 @@ class GeneratedReport {
     reportType: row['report_type'] as String? ?? 'DAE-1B',
     periodMonth: row['period_month'] as int,
     periodYear: row['period_year'] as int,
+    batchId: row['batch_id'] as String?,
+    businessId: row['business_id'] as String?,
+    businessName: row['business_name'] as String?,
     fileUrl: row['file_url'] as String?,
     generatedAt: DateTime.parse(row['generated_at'] as String),
-    generatedBy: row['generated_by'] as String?,
+    generatedBy: row['generated_by_name'] as String?,
     sheetOptions: ReportSheetOptions(
       includeDailySheet: (row['include_sheet_establishment'] == 1 || row['include_sheet_establishment'] == true),
       includeCountrySumSheet: (row['include_sheet_country_sum'] == 1 || row['include_sheet_country_sum'] == true),
@@ -123,14 +132,12 @@ class ReportService extends BaseApi {
     }
   }
 
-  /// Generates a new report on the backend.
-  Future<String> generateAndUpload(ReportParams params) async {
-    final response = await post('/api/admin/reports/generate', {
+  /// Generates reports on the backend (one per establishment).
+  Future<void> generateAndUpload(ReportParams params) async {
+    await post('/api/admin/reports/generate', {
       'month': params.month,
       'year': params.year,
       'sheetOptions': params.sheetOptions.toJson(),
     });
-    final data = handleResponse(response);
-    return data['fileUrl'];
   }
 }

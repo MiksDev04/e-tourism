@@ -236,7 +236,10 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     var list = _reports;
     final q = _searchQuery.toLowerCase();
     if (q.isNotEmpty) {
-      list = list.where((r) => r.id.toLowerCase().contains(q)).toList();
+      list = list.where((r) =>
+        r.id.toLowerCase().contains(q) ||
+        (r.businessName ?? '').toLowerCase().contains(q)
+      ).toList();
     }
     if (_filterMonth.isNotEmpty && _filterMonth != 'All Months') {
       list = list.where((r) => r.periodLabel.contains(_filterMonth)).toList();
@@ -363,7 +366,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                           icon: Icons.folder_zip_rounded,
                           label: 'Generated Reports',
                           subtitle:
-                              'DAE-1B Report files',
+                              'One file per establishment',
                           trailing: _isGenerating
                               ? const SizedBox(
                                   width: 16,
@@ -552,7 +555,8 @@ class _TableHeader extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            Expanded(flex: 4, child: _HeaderCell('Report ID')),
+            Expanded(flex: 3, child: _HeaderCell('Report ID')),
+            Expanded(flex: 3, child: _HeaderCell('Business')),
             Expanded(flex: 2, child: _HeaderCell('Period')),
             SizedBox(width: 72),
           ],
@@ -563,11 +567,12 @@ class _TableHeader extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
-          Expanded(flex: 4, child: _HeaderCell('Report ID')),
-          Expanded(flex: 2, child: _HeaderCell('Type')),
-          Expanded(flex: 2, child: _HeaderCell('Period')),
-          Expanded(flex: 2, child: _HeaderCell('Sheets')),
-          Expanded(flex: 3, child: _HeaderCell('Generated At')),
+          Expanded(flex: 3, child: _HeaderCell('Report ID')),
+          Expanded(flex: 2, child: _HeaderCell('Business')),
+          Expanded(flex: 1, child: _HeaderCell('Type')),
+          Expanded(flex: 1, child: _HeaderCell('Period')),
+          Expanded(flex: 1, child: _HeaderCell('Sheets')),
+          Expanded(flex: 2, child: _HeaderCell('Generated At')),
           SizedBox(width: 88, child: _HeaderCell('Actions')),
         ],
       ),
@@ -599,17 +604,26 @@ class _TableRow extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              flex: 4,
+              flex: 3,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _ReportIdBadge(shortId: report.shortId),
                   const SizedBox(height: 3),
                   Text(
+                    report.businessName ?? '',
+                    style: const TextStyle(
+                      color: AppColors.textWhite,
+                      fontSize: 12,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
                     dateStr,
                     style: const TextStyle(
                       color: AppColors.textGray,
-                      fontSize: 11.5,
+                      fontSize: 11,
                     ),
                   ),
                 ],
@@ -638,24 +652,35 @@ class _TableRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            flex: 4,
+            flex: 3,
             child: Tooltip(
               message: report.id,
               child: _ReportIdBadge(shortId: report.shortId),
             ),
           ),
-          Expanded(flex: 2, child: _TypeBadge(label: report.reportType)),
           Expanded(
             flex: 2,
+            child: Text(
+              report.businessName ?? '',
+              style: const TextStyle(
+                color: AppColors.textWhite,
+                fontSize: 13,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Expanded(flex: 1, child: _TypeBadge(label: report.reportType)),
+          Expanded(
+            flex: 1,
             child: Text(
               report.periodLabel,
               style:
                   const TextStyle(color: AppColors.textGray, fontSize: 13),
             ),
           ),
-          Expanded(flex: 2, child: _SheetPills(options: report.sheetOptions)),
+          Expanded(flex: 1, child: _SheetPills(options: report.sheetOptions)),
           Expanded(
-            flex: 3,
+            flex: 2,
             child: Text(
               dateStr,
               style:
@@ -937,7 +962,7 @@ class _GenerateReportDialogState extends State<_GenerateReportDialog> {
                         ),
                       ),
                       Text(
-                        'All approved establishments · export as .xlsx',
+                        'One file per establishment · export as .xlsx',
                         style: TextStyle(
                           color: AppColors.textGray,
                           fontSize: 11.5,
@@ -997,7 +1022,7 @@ class _GenerateReportDialogState extends State<_GenerateReportDialog> {
                     _SheetToggle(
                       label: 'Country Summary',
                       subtitle:
-                          'All establishments combined — selected month',
+                          'Per establishment — selected month',
                       value: _sheet2,
                       onChanged: (v) => setState(() => _sheet2 = v),
                     ),
@@ -1005,7 +1030,7 @@ class _GenerateReportDialogState extends State<_GenerateReportDialog> {
                     _SheetToggle(
                       label: 'Monthly Summary',
                       subtitle:
-                          'All 12 months of the year — all establishments',
+                          'Per establishment — all 12 months',
                       value: _sheet3,
                       onChanged: (v) => setState(() => _sheet3 = v),
                       isLast: true,
