@@ -13,7 +13,6 @@ import 'package:app/ui/shared/widgets/paginator.dart';
 import 'package:app/api/admin_report_api.dart';
 import 'package:app/ui/admin/widgets/report_view_modal.dart';
 
-
 // ─── Admin Reports Page ───────────────────────────────────────────────────────
 
 class AdminReportsPage extends StatefulWidget {
@@ -32,14 +31,10 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   int? _errorCode;
   String? _fetchError;
   bool _isGenerating = false;
-  bool _showFilters = false;
-  String _searchQuery = '';
   String _filterMonth = '';
   String _filterYear = '';
   int _currentPage = 0;
   int _pageSize = 10;
-
-  final _searchCtrl = TextEditingController();
 
   static const List<int> _pageSizeOptions = [10, 20, 30];
 
@@ -76,7 +71,6 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
 
   @override
   void dispose() {
-    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -120,12 +114,12 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   Future<void> _onGenerateReport({
     required int month,
     required int year,
-    required ReportSheetOptions sheetOptions,
+    required String scope,
   }) async {
     setState(() => _isGenerating = true);
     try {
       await _reportService.generateAndUpload(
-        ReportParams(month: month, year: year, sheetOptions: sheetOptions),
+        ReportParams(month: month, year: year, scope: scope),
       );
       await _fetchReports();
       if (!mounted) return;
@@ -144,18 +138,11 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
       builder: (_) => _GenerateReportDialog(
         months: _months.where((m) => m != 'All Months').toList(),
         years: _years.where((y) => y != 'All Years').toList(),
-        onGenerate: ({
-          required int month,
-          required int year,
-          required ReportSheetOptions sheetOptions,
-        }) {
-          Navigator.pop(context);
-          _onGenerateReport(
-            month: month,
-            year: year,
-            sheetOptions: sheetOptions,
-          );
-        },
+        onGenerate:
+            ({required int month, required int year, required String scope}) {
+              Navigator.pop(context);
+              _onGenerateReport(month: month, year: year, scope: scope);
+            },
       ),
     );
   }
@@ -184,7 +171,6 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
 
       final fileName =
           'Report_${report.shortId}_${report.periodLabel.replaceAll(' ', '_')}.xlsx';
-
 
       if (kIsWeb) {
         await saveFileToDownloads(fileName, fileData);
@@ -226,21 +212,12 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     setState(() {
       _filterMonth = '';
       _filterYear = '';
-      _searchQuery = '';
-      _searchCtrl.clear();
       _currentPage = 0;
     });
   }
 
   List<GeneratedReport> get _filteredReports {
     var list = _reports;
-    final q = _searchQuery.toLowerCase();
-    if (q.isNotEmpty) {
-      list = list.where((r) =>
-        r.id.toLowerCase().contains(q) ||
-        (r.businessName ?? '').toLowerCase().contains(q)
-      ).toList();
-    }
     if (_filterMonth.isNotEmpty && _filterMonth != 'All Months') {
       list = list.where((r) => r.periodLabel.contains(_filterMonth)).toList();
     }
@@ -280,8 +257,8 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
         behavior: behavior ?? SnackBarBehavior.fixed,
         margin:
             (behavior ?? SnackBarBehavior.fixed) == SnackBarBehavior.floating
-                ? const EdgeInsets.fromLTRB(16, 0, 16, 16)
-                : null,
+            ? const EdgeInsets.fromLTRB(16, 0, 16, 16)
+            : null,
         duration: duration ?? const Duration(seconds: 3),
         content: Text(msg, style: const TextStyle(color: Colors.white)),
         action: (actionText != null && onActionPressed != null)
@@ -329,44 +306,30 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                       children: [
                         _PageHeader(
                           isNarrow: isNarrow,
-                          showFilters: _showFilters,
                           isGenerating: _isGenerating,
-                          onFilterTap: () =>
-                              setState(() => _showFilters = !_showFilters),
                           onGenerateTap: _showGenerateDialog,
                         ),
                         const SizedBox(height: 16),
-                        if (_showFilters) ...[
-                          _FilterSection(
-                            months: _months,
-                            years: _years,
-                            selectedMonth: _filterMonth,
-                            selectedYear: _filterYear,
-                            onMonthChanged: (v) => setState(() {
-                              _filterMonth = v ?? '';
-                              _resetPage();
-                            }),
-                            onYearChanged: (v) => setState(() {
-                              _filterYear = v ?? '';
-                              _resetPage();
-                            }),
-                            onClear: _clearFilters,
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                        _SearchBar(
-                          controller: _searchCtrl,
-                          onChanged: (v) => setState(() {
-                            _searchQuery = v;
+                        _FilterSection(
+                          months: _months,
+                          years: _years,
+                          selectedMonth: _filterMonth,
+                          selectedYear: _filterYear,
+                          onMonthChanged: (v) => setState(() {
+                            _filterMonth = v ?? '';
                             _resetPage();
                           }),
+                          onYearChanged: (v) => setState(() {
+                            _filterYear = v ?? '';
+                            _resetPage();
+                          }),
+                          onClear: _clearFilters,
                         ),
                         const SizedBox(height: 20),
                         _SectionLabel(
                           icon: Icons.folder_zip_rounded,
                           label: 'Generated Reports',
-                          subtitle:
-                              'One file per establishment',
+                          subtitle: 'One file per establishment',
                           trailing: _isGenerating
                               ? const SizedBox(
                                   width: 16,
@@ -466,8 +429,7 @@ class _SectionLabel extends StatelessWidget {
               ),
               Text(
                 subtitle,
-                style:
-                    const TextStyle(color: AppColors.textGray, fontSize: 12),
+                style: const TextStyle(color: AppColors.textGray, fontSize: 12),
               ),
             ],
           ),
@@ -555,7 +517,6 @@ class _TableHeader extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            Expanded(flex: 3, child: _HeaderCell('Report ID')),
             Expanded(flex: 3, child: _HeaderCell('Business')),
             Expanded(flex: 2, child: _HeaderCell('Period')),
             SizedBox(width: 72),
@@ -567,11 +528,9 @@ class _TableHeader extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
-          Expanded(flex: 3, child: _HeaderCell('Report ID')),
           Expanded(flex: 2, child: _HeaderCell('Business')),
-          Expanded(flex: 1, child: _HeaderCell('Type')),
           Expanded(flex: 1, child: _HeaderCell('Period')),
-          Expanded(flex: 1, child: _HeaderCell('Sheets')),
+          Expanded(flex: 1, child: _HeaderCell('Scope')),
           Expanded(flex: 2, child: _HeaderCell('Generated At')),
           SizedBox(width: 88, child: _HeaderCell('Actions')),
         ],
@@ -608,8 +567,6 @@ class _TableRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _ReportIdBadge(shortId: report.shortId),
-                  const SizedBox(height: 3),
                   Text(
                     report.businessName ?? '',
                     style: const TextStyle(
@@ -633,8 +590,7 @@ class _TableRow extends StatelessWidget {
               flex: 2,
               child: Text(
                 report.periodLabel,
-                style:
-                    const TextStyle(color: AppColors.textGray, fontSize: 13),
+                style: const TextStyle(color: AppColors.textGray, fontSize: 13),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -652,39 +608,26 @@ class _TableRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            flex: 3,
-            child: Tooltip(
-              message: report.id,
-              child: _ReportIdBadge(shortId: report.shortId),
-            ),
-          ),
-          Expanded(
             flex: 2,
             child: Text(
               report.businessName ?? '',
-              style: const TextStyle(
-                color: AppColors.textWhite,
-                fontSize: 13,
-              ),
+              style: const TextStyle(color: AppColors.textWhite, fontSize: 13),
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Expanded(flex: 1, child: _TypeBadge(label: report.reportType)),
           Expanded(
             flex: 1,
             child: Text(
               report.periodLabel,
-              style:
-                  const TextStyle(color: AppColors.textGray, fontSize: 13),
+              style: const TextStyle(color: AppColors.textGray, fontSize: 13),
             ),
           ),
-          Expanded(flex: 1, child: _SheetPills(options: report.sheetOptions)),
+          Expanded(flex: 1, child: _ScopeBadge(scope: report.reportScope)),
           Expanded(
             flex: 2,
             child: Text(
               dateStr,
-              style:
-                  const TextStyle(color: AppColors.textGray, fontSize: 13),
+              style: const TextStyle(color: AppColors.textGray, fontSize: 13),
             ),
           ),
           SizedBox(
@@ -754,33 +697,6 @@ class _ViewButton extends StatelessWidget {
 
 // ─── Small shared widgets ─────────────────────────────────────────────────────
 
-class _ReportIdBadge extends StatelessWidget {
-  const _ReportIdBadge({required this.shortId});
-  final String shortId;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.tag_rounded, color: AppColors.textSubtle, size: 13),
-
-        const SizedBox(width: 4),
-        Text(
-          shortId,
-          style: const TextStyle(
-            color: AppColors.textWhite,
-            fontSize: 13.5,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-            fontFamily: 'monospace',
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _HeaderCell extends StatelessWidget {
   const _HeaderCell(this.label);
   final String label;
@@ -798,67 +714,15 @@ class _HeaderCell extends StatelessWidget {
   }
 }
 
-class _TypeBadge extends StatelessWidget {
-  const _TypeBadge({required this.label});
-  final String label;
+class _ScopeBadge extends StatelessWidget {
+  const _ScopeBadge({required this.scope});
+  final String scope;
 
   @override
   Widget build(BuildContext context) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: AppColors.primaryCyan.withOpacity(0.10),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.primaryCyan.withOpacity(0.25)),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.primaryCyan,
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SheetPills extends StatelessWidget {
-  const _SheetPills({this.options});
-  final ReportSheetOptions? options;
-
-  @override
-  Widget build(BuildContext context) {
-    if (options == null) {
-      return const Text(
-        '—',
-        style: TextStyle(color: AppColors.textSubtle, fontSize: 12),
-      );
-    }
-    return Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      children: [
-        if (options!.includeDailySheet) const _Pill('S1'),
-        if (options!.includeCountrySumSheet) const _Pill('S2'),
-        if (options!.includeMonthlySummarySheet) const _Pill('S3'),
-      ],
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill(this.label);
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
+    final label = scope == 'annual' ? 'Annual' : 'Monthly';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: AppColors.primaryCyan.withOpacity(0.08),
         borderRadius: BorderRadius.circular(4),
@@ -890,30 +754,36 @@ class _GenerateReportDialog extends StatefulWidget {
   final void Function({
     required int month,
     required int year,
-    required ReportSheetOptions sheetOptions,
-  }) onGenerate;
+    required String scope,
+  })
+  onGenerate;
 
   @override
   State<_GenerateReportDialog> createState() => _GenerateReportDialogState();
 }
 
 class _GenerateReportDialogState extends State<_GenerateReportDialog> {
+  String _scope = 'monthly';
   String? _selectedMonth;
   String? _selectedYear;
 
-  bool _sheet1 = true;
-  bool _sheet2 = true;
-  bool _sheet3 = true;
-
   bool get _canGenerate =>
-      _selectedMonth != null &&
-      _selectedYear != null &&
-      (_sheet1 || _sheet2 || _sheet3);
+      _selectedYear != null && (_scope == 'annual' || _selectedMonth != null);
 
   static int _monthIndex(String name) {
     const names = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return names.indexOf(name) + 1;
   }
@@ -954,7 +824,7 @@ class _GenerateReportDialogState extends State<_GenerateReportDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Generate DAE-1B Report',
+                        'Generate Report',
                         style: TextStyle(
                           color: AppColors.textWhite,
                           fontSize: 16,
@@ -962,7 +832,7 @@ class _GenerateReportDialogState extends State<_GenerateReportDialog> {
                         ),
                       ),
                       Text(
-                        'One file per establishment · export as .xlsx',
+                        'One record per establishment · export as .xlsx and .pdf',
                         style: TextStyle(
                           color: AppColors.textGray,
                           fontSize: 11.5,
@@ -973,16 +843,48 @@ class _GenerateReportDialogState extends State<_GenerateReportDialog> {
                 ],
               ),
               const SizedBox(height: 24),
-              const _DialogLabel('Month'),
+              const _DialogLabel('Report Scope'),
               const SizedBox(height: 6),
-              _DropdownField<String>(
-                hint: 'Select month',
-                value: _selectedMonth,
-                items: widget.months,
-                itemLabel: (m) => m,
-                onChanged: (v) => setState(() => _selectedMonth = v),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.backgroundDark,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.cardBorder),
+                ),
+                child: Column(
+                  children: [
+                    _ScopeOption(
+                      label: 'Monthly Report',
+                      subtitle:
+                          'Daily breakdown + country summary for one month',
+                      selected: _scope == 'monthly',
+                      onTap: () => setState(() => _scope = 'monthly'),
+                      isFirst: true,
+                    ),
+                    const Divider(color: AppColors.cardBorder, height: 1),
+                    _ScopeOption(
+                      label: 'Annual Summary',
+                      subtitle: '12-month summary per establishment',
+                      selected: _scope == 'annual',
+                      onTap: () => setState(() => _scope = 'annual'),
+                      isLast: true,
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 14),
+              if (_scope == 'monthly') ...[
+                const _DialogLabel('Month'),
+                const SizedBox(height: 6),
+                _DropdownField<String>(
+                  hint: 'Select month',
+                  value: _selectedMonth,
+                  items: widget.months,
+                  itemLabel: (m) => m,
+                  onChanged: (v) => setState(() => _selectedMonth = v),
+                ),
+                const SizedBox(height: 14),
+              ],
               const _DialogLabel('Year'),
               const SizedBox(height: 6),
               _DropdownField<String>(
@@ -992,61 +894,6 @@ class _GenerateReportDialogState extends State<_GenerateReportDialog> {
                 itemLabel: (y) => y,
                 onChanged: (v) => setState(() => _selectedYear = v),
               ),
-              const SizedBox(height: 18),
-              const Text(
-                'Include Sheets',
-                style: TextStyle(
-                  color: AppColors.textGray,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.backgroundDark,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.cardBorder),
-                ),
-                child: Column(
-                  children: [
-                    _SheetToggle(
-                      label: 'Daily Breakdown',
-                      subtitle:
-                          'One tab per establishment for selected month',
-                      value: _sheet1,
-                      onChanged: (v) => setState(() => _sheet1 = v),
-                      isFirst: true,
-                    ),
-                    const Divider(color: AppColors.cardBorder, height: 1),
-                    _SheetToggle(
-                      label: 'Country Summary',
-                      subtitle:
-                          'Per establishment — selected month',
-                      value: _sheet2,
-                      onChanged: (v) => setState(() => _sheet2 = v),
-                    ),
-                    const Divider(color: AppColors.cardBorder, height: 1),
-                    _SheetToggle(
-                      label: 'Monthly Summary',
-                      subtitle:
-                          'Per establishment — all 12 months',
-                      value: _sheet3,
-                      onChanged: (v) => setState(() => _sheet3 = v),
-                      isLast: true,
-                    ),
-                  ],
-                ),
-              ),
-              if (!_sheet1 && !_sheet2 && !_sheet3)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Select at least one sheet to generate.',
-                    style:
-                        TextStyle(color: Color(0xFFFF4D6A), fontSize: 11.5),
-                  ),
-                ),
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -1055,27 +902,26 @@ class _GenerateReportDialogState extends State<_GenerateReportDialog> {
                     onPressed: () => Navigator.pop(context),
                     child: const Text(
                       'Cancel',
-                      style: TextStyle(
-                          color: AppColors.textGray, fontSize: 13),
+                      style: TextStyle(color: AppColors.textGray, fontSize: 13),
                     ),
                   ),
                   const SizedBox(width: 10),
                   GestureDetector(
                     onTap: _canGenerate
                         ? () => widget.onGenerate(
-                              month: _monthIndex(_selectedMonth!),
-                              year: int.parse(_selectedYear!),
-                              sheetOptions: ReportSheetOptions(
-                                includeDailySheet: _sheet1,
-                                includeCountrySumSheet: _sheet2,
-                                includeMonthlySummarySheet: _sheet3,
-                              ),
-                            )
+                            month: _scope == 'annual'
+                                ? 12
+                                : _monthIndex(_selectedMonth!),
+                            year: int.parse(_selectedYear!),
+                            scope: _scope,
+                          )
                         : null,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 10),
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: _canGenerate
                             ? AppColors.primaryCyan
@@ -1088,8 +934,7 @@ class _GenerateReportDialogState extends State<_GenerateReportDialog> {
                           Icon(
                             Icons.auto_awesome_rounded,
                             size: 15,
-                            color:
-                                _canGenerate ? Colors.black : Colors.black45,
+                            color: _canGenerate ? Colors.black : Colors.black45,
                           ),
                           const SizedBox(width: 6),
                           Text(
@@ -1116,47 +961,45 @@ class _GenerateReportDialogState extends State<_GenerateReportDialog> {
   }
 }
 
-class _SheetToggle extends StatelessWidget {
-  const _SheetToggle({
+class _ScopeOption extends StatelessWidget {
+  const _ScopeOption({
     required this.label,
     required this.subtitle,
-    required this.value,
-    required this.onChanged,
+    required this.selected,
+    required this.onTap,
     this.isFirst = false,
     this.isLast = false,
   });
 
   final String label;
   final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
+  final bool selected;
+  final VoidCallback onTap;
   final bool isFirst;
   final bool isLast;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => onChanged(!value),
+      onTap: onTap,
       borderRadius: BorderRadius.vertical(
         top: isFirst ? const Radius.circular(10) : Radius.zero,
         bottom: isLast ? const Radius.circular(10) : Radius.zero,
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
             SizedBox(
               width: 20,
               height: 20,
-              child: Checkbox(
-                value: value,
-                onChanged: (v) => onChanged(v ?? false),
+              child: Radio<String>(
+                value: label == 'Monthly Report' ? 'monthly' : 'annual',
+                groupValue: selected
+                    ? (label == 'Monthly Report' ? 'monthly' : 'annual')
+                    : null,
+                onChanged: (_) => onTap(),
                 activeColor: AppColors.primaryCyan,
-                checkColor: Colors.black,
-                side: const BorderSide(
-                    color: AppColors.textGray, width: 1.2),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
             const SizedBox(width: 12),
@@ -1167,8 +1010,9 @@ class _SheetToggle extends StatelessWidget {
                   Text(
                     label,
                     style: TextStyle(
-                      color:
-                          value ? AppColors.textWhite : AppColors.textGray,
+                      color: selected
+                          ? AppColors.textWhite
+                          : AppColors.textGray,
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1176,7 +1020,7 @@ class _SheetToggle extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: value
+                      color: selected
                           ? AppColors.textGray
                           : AppColors.textSubtle,
                       fontSize: 11,
@@ -1243,16 +1087,14 @@ class _DropdownField<T> extends StatelessWidget {
           isDense: true,
           hint: Text(
             hint,
-            style: const TextStyle(
-                color: AppColors.textSubtle, fontSize: 13),
+            style: const TextStyle(color: AppColors.textSubtle, fontSize: 13),
           ),
           icon: const Icon(
             Icons.keyboard_arrow_down_rounded,
             color: AppColors.textGray,
             size: 20,
           ),
-          style:
-              const TextStyle(color: AppColors.textWhite, fontSize: 13),
+          style: const TextStyle(color: AppColors.textWhite, fontSize: 13),
           dropdownColor: AppColors.cardBackground,
           items: items
               .map(
@@ -1262,7 +1104,9 @@ class _DropdownField<T> extends StatelessWidget {
                     itemLabel(item),
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        color: AppColors.textWhite, fontSize: 13),
+                      color: AppColors.textWhite,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               )
@@ -1297,8 +1141,6 @@ class _FilterSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final cols = width >= 600 ? 2 : 1;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1307,60 +1149,25 @@ class _FilterSection extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.cardBorder),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 2,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
+        mainAxisExtent: 58,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Filters',
-                style: TextStyle(
-                  color: AppColors.textWhite,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              TextButton(
-                onPressed: onClear,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                  minimumSize: Size.zero,
-                ),
-                child: const Text(
-                  'Clear All',
-                  style: TextStyle(
-                    color: AppColors.primaryCyan,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
+          _FilterDropdown(
+            label: 'Month',
+            value: selectedMonth.isEmpty ? 'All Months' : selectedMonth,
+            items: months,
+            onChanged: onMonthChanged,
           ),
-          const SizedBox(height: 14),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: cols,
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 14,
-            mainAxisExtent: 58,
-            children: [
-              _FilterDropdown(
-                label: 'Month',
-                value: selectedMonth.isEmpty ? 'All Months' : selectedMonth,
-                items: months,
-                onChanged: onMonthChanged,
-              ),
-              _FilterDropdown(
-                label: 'Year',
-                value: selectedYear.isEmpty ? 'All Years' : selectedYear,
-                items: years,
-                onChanged: onYearChanged,
-              ),
-            ],
+          _FilterDropdown(
+            label: 'Year',
+            value: selectedYear.isEmpty ? 'All Years' : selectedYear,
+            items: years,
+            onChanged: onYearChanged,
           ),
         ],
       ),
@@ -1413,8 +1220,7 @@ class _FilterDropdown extends StatelessWidget {
                 color: AppColors.textGray,
                 size: 20,
               ),
-              style: const TextStyle(
-                  color: AppColors.textWhite, fontSize: 13),
+              style: const TextStyle(color: AppColors.textWhite, fontSize: 13),
               dropdownColor: AppColors.cardBackground,
               items: items
                   .map(
@@ -1424,7 +1230,9 @@ class _FilterDropdown extends StatelessWidget {
                         item,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            color: AppColors.textWhite, fontSize: 13),
+                          color: AppColors.textWhite,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   )
@@ -1438,73 +1246,24 @@ class _FilterDropdown extends StatelessWidget {
   }
 }
 
-// ─── Search Bar ───────────────────────────────────────────────────────────────
-
-class _SearchBar extends StatelessWidget {
-  const _SearchBar({required this.controller, required this.onChanged});
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        style:
-            const TextStyle(color: AppColors.textWhite, fontSize: 13.5),
-        decoration: const InputDecoration(
-          hintText: 'Search by report ID…',
-          hintStyle:
-              TextStyle(color: AppColors.textSubtle, fontSize: 13.5),
-          prefixIcon: Icon(
-            Icons.search_rounded,
-            color: AppColors.textSubtle,
-            size: 20,
-          ),
-          border: InputBorder.none,
-          contentPadding:
-              EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-        ),
-      ),
-    );
-  }
-}
-
 // ─── Page Header ──────────────────────────────────────────────────────────────
 
 class _PageHeader extends StatelessWidget {
   const _PageHeader({
     required this.isNarrow,
-    required this.showFilters,
     required this.isGenerating,
-    required this.onFilterTap,
     required this.onGenerateTap,
   });
 
   final bool isNarrow;
-  final bool showFilters;
   final bool isGenerating;
-  final VoidCallback onFilterTap;
   final VoidCallback onGenerateTap;
 
   @override
   Widget build(BuildContext context) {
-    final filterBtn = _HeaderButton(
-      icon: Icons.filter_list_rounded,
-      label: isNarrow ? null : 'Filters',
-      isActive: showFilters,
-      onTap: onFilterTap,
-    );
-
     final generateBtn = _HeaderButton(
       icon: Icons.description_rounded,
-      label: isNarrow ? null : 'Generate Report',
+      label: isNarrow ? 'Generate' : 'Generate Report',
       isPrimary: true,
       isLoading: isGenerating,
       onTap: onGenerateTap,
@@ -1523,32 +1282,17 @@ class _PageHeader extends StatelessWidget {
         ),
         SizedBox(height: 4),
         Text(
-          'Generate and download DAE-1B reports',
+          'Generate and download reports',
           style: TextStyle(color: AppColors.textGray, fontSize: 13),
         ),
       ],
     );
 
-    if (isNarrow) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          titleBlock,
-          const SizedBox(height: 12),
-          Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [filterBtn, generateBtn]),
-        ],
-      );
-    }
+
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        titleBlock,
-        Row(children: [filterBtn, const SizedBox(width: 10), generateBtn]),
-      ],
+      children: [titleBlock, generateBtn],
     );
   }
 }
@@ -1558,7 +1302,6 @@ class _HeaderButton extends StatelessWidget {
     required this.icon,
     required this.onTap,
     this.label,
-    this.isActive = false,
     this.isPrimary = false,
     this.isLoading = false,
   });
@@ -1566,7 +1309,6 @@ class _HeaderButton extends StatelessWidget {
   final IconData icon;
   final String? label;
   final VoidCallback onTap;
-  final bool isActive;
   final bool isPrimary;
   final bool isLoading;
 
@@ -1580,10 +1322,6 @@ class _HeaderButton extends StatelessWidget {
       bg = AppColors.primaryCyan;
       border = AppColors.primaryCyan;
       fg = Colors.white;
-    } else if (isActive) {
-      bg = AppColors.primaryCyan.withOpacity(0.15);
-      border = AppColors.primaryCyan;
-      fg = AppColors.primaryCyan;
     } else {
       bg = AppColors.cardBackground;
       border = AppColors.cardBorder;
@@ -1634,8 +1372,7 @@ class _HeaderButton extends StatelessWidget {
                 style: TextStyle(
                   color: fg,
                   fontSize: 13,
-                  fontWeight:
-                      isPrimary ? FontWeight.w600 : FontWeight.normal,
+                  fontWeight: isPrimary ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
             ],

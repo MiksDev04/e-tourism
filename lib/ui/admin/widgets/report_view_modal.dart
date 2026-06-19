@@ -87,7 +87,8 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
     if (_pdfBytes == null) return;
     setState(() => _exportingPdf = true);
     try {
-      final fileName = 'Report_${widget.report.shortId}_'
+      final fileName =
+          'Report_${widget.report.shortId}_'
           '${widget.report.periodLabel.replaceAll(' ', '_')}.pdf';
 
       if (kIsWeb) {
@@ -102,7 +103,7 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
         final file = File('${downloadsDir.path}/$fileName');
         await file.writeAsBytes(_pdfBytes!);
         _showModalSnack('PDF saved: $fileName');
-        
+
         final uri = Uri.file(file.path);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -132,8 +133,9 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg, style: const TextStyle(color: Colors.white)),
-        backgroundColor:
-            isError ? const Color(0xFFFF4D6A) : const Color(0xFF00C48C),
+        backgroundColor: isError
+            ? const Color(0xFFFF4D6A)
+            : const Color(0xFF00C48C),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -174,7 +176,9 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
               onClose: () => Navigator.pop(context),
               onExportExcel: _exportingExcel ? null : _exportExcel,
               exportingExcel: _exportingExcel,
-              onExportPdf: (_exportingPdf || _pdfBytes == null) ? null : _exportPdf,
+              onExportPdf: (_exportingPdf || _pdfBytes == null)
+                  ? null
+                  : _exportPdf,
               exportingPdf: _exportingPdf,
               onPrint: (_pdfBytes == null) ? null : _printPdf,
               zoomScale: _zoomScale,
@@ -187,11 +191,8 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
               child: _loading
                   ? const _LoadingView()
                   : _error != null
-                      ? _ErrorView(error: _error!)
-                      : _PdfView(
-                          pdfBytes: _pdfBytes!,
-                          zoomScale: _zoomScale,
-                        ),
+                  ? _ErrorView(error: _error!)
+                  : _PdfView(pdfBytes: _pdfBytes!, zoomScale: _zoomScale),
             ),
           ],
         ),
@@ -201,11 +202,7 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
 }
 
 class _PdfView extends StatefulWidget {
-  const _PdfView({
-    super.key,
-    required this.pdfBytes,
-    required this.zoomScale,
-  });
+  const _PdfView({super.key, required this.pdfBytes, required this.zoomScale});
 
   final Uint8List pdfBytes;
   final double zoomScale;
@@ -282,7 +279,9 @@ class _PdfViewState extends State<_PdfView> {
                 pdfPreviewPageDecoration: BoxDecoration(
                   color: Colors.white,
                   border: Border.all(
-                      color: Colors.black.withOpacity(0.05), width: 0.5),
+                    color: Colors.black.withOpacity(0.05),
+                    width: 0.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.1),
@@ -292,7 +291,9 @@ class _PdfViewState extends State<_PdfView> {
                   ],
                 ),
                 previewPageMargin: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 20),
+                  horizontal: 24,
+                  vertical: 20,
+                ),
               ),
             ),
           ),
@@ -332,117 +333,117 @@ class _ModalHeader extends StatelessWidget {
   final VoidCallback onResetZoom;
 
   Widget _buildIcon() => Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: AppColors.primaryCyan.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: const Icon(
-          Icons.picture_as_pdf_rounded,
-          color: AppColors.primaryCyan,
-          size: 18,
-        ),
-      );
+    width: 36,
+    height: 36,
+    decoration: BoxDecoration(
+      color: AppColors.primaryCyan.withOpacity(0.12),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: const Icon(
+      Icons.picture_as_pdf_rounded,
+      color: AppColors.primaryCyan,
+      size: 18,
+    ),
+  );
 
   Widget _buildInfo() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 4,
         children: [
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              Text(
-                report.reportType,
-                style: const TextStyle(
-                  color: AppColors.textWhite,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryCyan.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(
-                    color: AppColors.primaryCyan.withOpacity(0.25),
-                  ),
-                ),
-                child: Text(
-                  report.periodLabel,
-                  style: const TextStyle(
-                    color: AppColors.primaryCyan,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
           Text(
-            'Report ID: ${report.shortId}',
+            report.reportScope,
             style: const TextStyle(
-              color: AppColors.textGray,
-              fontSize: 11.5,
-              fontFamily: 'monospace',
+              color: AppColors.textWhite,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.primaryCyan.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(
+                color: AppColors.primaryCyan.withOpacity(0.25),
+              ),
+            ),
+            child: Text(
+              report.periodLabel,
+              style: const TextStyle(
+                color: AppColors.primaryCyan,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
-      );
+      ),
+      const SizedBox(height: 2),
+      Text(
+        'Report ID: ${report.shortId}',
+        style: const TextStyle(
+          color: AppColors.textGray,
+          fontSize: 11.5,
+          fontFamily: 'monospace',
+        ),
+      ),
+    ],
+  );
 
   Widget _buildZoomControls() => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.backgroundDark,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.cardBorder),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ZoomBtn(icon: Icons.remove_rounded, onTap: onZoomOut),
-            GestureDetector(
-              onTap: onResetZoom,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                constraints: const BoxConstraints(minWidth: 48),
-                child: Text(
-                  '${(zoomScale * 100).toInt()}%',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppColors.textWhite,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+    decoration: BoxDecoration(
+      color: AppColors.backgroundDark,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: AppColors.cardBorder),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ZoomBtn(icon: Icons.remove_rounded, onTap: onZoomOut),
+        GestureDetector(
+          onTap: onResetZoom,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            constraints: const BoxConstraints(minWidth: 48),
+            child: Text(
+              '${(zoomScale * 100).toInt()}%',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textWhite,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            _ZoomBtn(icon: Icons.add_rounded, onTap: onZoomIn),
-          ],
+          ),
         ),
-      );
+        _ZoomBtn(icon: Icons.add_rounded, onTap: onZoomIn),
+      ],
+    ),
+  );
 
   Widget _buildCloseBtn() => GestureDetector(
-        onTap: onClose,
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: AppColors.backgroundDark,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.cardBorder),
-          ),
-          child: const Icon(
-            Icons.close_rounded,
-            color: AppColors.textGray,
-            size: 16,
-          ),
-        ),
-      );
+    onTap: onClose,
+    child: Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: AppColors.backgroundDark,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: const Icon(
+        Icons.close_rounded,
+        color: AppColors.textGray,
+        size: 16,
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -588,7 +589,6 @@ class _ZoomBtn extends StatelessWidget {
   }
 }
 
-
 // ── Export Button ─────────────────────────────────────────────────────────────
 
 class _ExportButton extends StatelessWidget {
@@ -712,8 +712,7 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               error,
-              style:
-                  const TextStyle(color: AppColors.textGray, fontSize: 12),
+              style: const TextStyle(color: AppColors.textGray, fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ],

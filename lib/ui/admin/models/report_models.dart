@@ -7,19 +7,27 @@ enum ReportStatus { submitted, approved, rejected, draft }
 extension ReportStatusX on ReportStatus {
   String get label {
     switch (this) {
-      case ReportStatus.submitted: return 'Submitted';
-      case ReportStatus.approved:  return 'Approved';
-      case ReportStatus.rejected:  return 'Rejected';
-      case ReportStatus.draft:     return 'Draft';
+      case ReportStatus.submitted:
+        return 'Submitted';
+      case ReportStatus.approved:
+        return 'Approved';
+      case ReportStatus.rejected:
+        return 'Rejected';
+      case ReportStatus.draft:
+        return 'Draft';
     }
   }
 
   static ReportStatus fromString(String? value) {
     switch (value) {
-      case 'submitted': return ReportStatus.submitted;
-      case 'approved':  return ReportStatus.approved;
-      case 'rejected':  return ReportStatus.rejected;
-      default:          return ReportStatus.draft;
+      case 'submitted':
+        return ReportStatus.submitted;
+      case 'approved':
+        return ReportStatus.approved;
+      case 'rejected':
+        return ReportStatus.rejected;
+      default:
+        return ReportStatus.draft;
     }
   }
 }
@@ -45,7 +53,7 @@ class Report {
   final ReportStatus status;
   final String? fileUrl;
   final String? remarks;
-  final String reportType;
+  final String reportScope;
 
   const Report({
     required this.id,
@@ -60,68 +68,74 @@ class Report {
     required this.status,
     this.fileUrl,
     this.remarks,
-    this.reportType = 'DAE-1B',
+    this.reportScope = 'monthly',
   });
 
   // ── Deserialisation ──────────────────────────────────────────────────────
 
   factory Report.fromJson(Map<String, dynamic> json) {
     const monthNames = [
-      'January', 'February', 'March', 'April',    'May',      'June',
-      'July',    'August',   'September', 'October', 'November', 'December',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
 
     final month = (json['period_month'] as num).toInt();
-    final year  = (json['period_year']  as num).toInt();
+    final year = (json['period_year'] as num).toInt();
 
     final businessMap = json['businesses'] as Map<String, dynamic>?;
 
     return Report(
-      id:          json['id']          as String,
-      businessId:  json['business_id'] as String,
-      business:    businessMap?['business_name'] as String? ?? 'Unknown Business',
-      period:      '${monthNames[month - 1]} $year',
+      id: json['id'] as String,
+      businessId: json['business_id'] as String,
+      business: businessMap?['business_name'] as String? ?? 'Unknown Business',
+      period: '${monthNames[month - 1]} $year',
       periodMonth: month,
-      periodYear:  year,
+      periodYear: year,
       totalGuests: (json['total_guests'] as num?)?.toInt() ?? 0,
-      checkIns:    (json['check_ins']    as num?)?.toInt() ?? 0,
-      submitted:   json['generated_at'] != null
+      checkIns: (json['check_ins'] as num?)?.toInt() ?? 0,
+      submitted: json['generated_at'] != null
           ? (json['generated_at'] as String).substring(0, 10)
           : null,
-      status:    ReportStatusX.fromString(json['status'] as String?),
-      fileUrl:   json['file_url']    as String?,
-      remarks:   json['remarks']     as String?,
-      reportType: json['report_type'] as String? ?? 'DAE-1B',
+      status: ReportStatusX.fromString(json['status'] as String?),
+      fileUrl: json['file_url'] as String?,
+      remarks: json['remarks'] as String?,
+      reportScope: json['report_scope'] as String? ?? 'monthly',
     );
   }
 
   // ── Mutation helpers ─────────────────────────────────────────────────────
 
-  Report copyWith({
-    ReportStatus? status,
-    String? fileUrl,
-    String? remarks,
-  }) {
+  Report copyWith({ReportStatus? status, String? fileUrl, String? remarks}) {
     return Report(
-      id:          id,
-      businessId:  businessId,
-      business:    business,
-      period:      period,
+      id: id,
+      businessId: businessId,
+      business: business,
+      period: period,
       periodMonth: periodMonth,
-      periodYear:  periodYear,
+      periodYear: periodYear,
       totalGuests: totalGuests,
-      checkIns:    checkIns,
-      submitted:   submitted,
-      status:      status  ?? this.status,
-      fileUrl:     fileUrl  ?? this.fileUrl,
-      remarks:     remarks  ?? this.remarks,
-      reportType:  reportType,
+      checkIns: checkIns,
+      submitted: submitted,
+      status: status ?? this.status,
+      fileUrl: fileUrl ?? this.fileUrl,
+      remarks: remarks ?? this.remarks,
+      reportScope: reportScope,
     );
   }
 
   @override
   String toString() =>
-      'Report($reportType · $business · $period · ${status.label})';
+      'Report($reportScope · $business · $period · ${status.label})';
 }
 
 // ─── Business Option (for dropdowns) ─────────────────────────────────────────
@@ -134,7 +148,7 @@ class BusinessOption {
 
   factory BusinessOption.fromJson(Map<String, dynamic> json) {
     return BusinessOption(
-      id:   json['id']            as String,
+      id: json['id'] as String,
       name: json['business_name'] as String,
     );
   }
@@ -172,15 +186,15 @@ class ReviewReportData {
 
   factory ReviewReportData.fromReport(Report r) {
     return ReviewReportData(
-      reportId:    r.id,
-      business:    r.business,
-      period:      r.period,
+      reportId: r.id,
+      business: r.business,
+      period: r.period,
       totalGuests: r.totalGuests,
-      checkIns:    r.checkIns,
-      submitted:   r.submitted,
-      status:      r.status,
-      fileUrl:     r.fileUrl,
-      remarks:     r.remarks,
+      checkIns: r.checkIns,
+      submitted: r.submitted,
+      status: r.status,
+      fileUrl: r.fileUrl,
+      remarks: r.remarks,
     );
   }
 }
