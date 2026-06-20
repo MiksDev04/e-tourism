@@ -203,15 +203,8 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
         api: _api,
         otp: otp,
         currentEmail: _profile?.email ?? '',
-        onSuccess: () async {
+        onSuccess: () {
           Navigator.of(context).pop();
-          // Refresh profile to show updated email
-          final updated = await _api.fetchProfile();
-          if (!mounted) return;
-          setState(() => _profile = updated);
-          _showSnackbar(
-            'Email updated successfully!',
-          );
         },
       ),
     );
@@ -944,6 +937,7 @@ class _ChangeEmailModalState extends State<_ChangeEmailModal> {
   final _newEmailCtrl = TextEditingController();
 
   bool _loading = false;
+  bool _emailSent = false;
   String? _errorMsg;
 
   @override
@@ -963,7 +957,7 @@ class _ChangeEmailModalState extends State<_ChangeEmailModal> {
         otp: widget.otp,
       );
       if (!mounted) return;
-      widget.onSuccess();
+      setState(() => _emailSent = true);
     } on ProfileApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -995,92 +989,159 @@ class _ChangeEmailModalState extends State<_ChangeEmailModal> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _ModalHeader(
-                    icon: Icons.email_outlined,
-                    title: 'Change Email Address',
-                    subtitle:
-                        'Identity verified. Enter your new email address below.',
-                  ),
-                  const Divider(color: AppColors.cardBorder, height: 28),
+                  if (_emailSent)
+                    _EmailConfirmationSent(newEmail: _newEmailCtrl.text)
+                  else ...[
+                    _ModalHeader(
+                      icon: Icons.email_outlined,
+                      title: 'Change Email Address',
+                      subtitle:
+                          'Identity verified. Enter your new email address below.',
+                    ),
+                    const Divider(color: AppColors.cardBorder, height: 28),
 
-                  // Current email (read-only display)
-                  _ModalField(
-                    label: 'Current Email',
-                    icon: Icons.inbox_outlined,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 13,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.inputBackground.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppColors.inputBorder.withOpacity(0.4),
+                    // Current email (read-only display)
+                    _ModalField(
+                      label: 'Current Email',
+                      icon: Icons.inbox_outlined,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 13,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.inputBackground.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppColors.inputBorder.withOpacity(0.4),
+                          ),
+                        ),
+                        child: Text(
+                          widget.currentEmail,
+                          style: const TextStyle(
+                            color: AppColors.textGray,
+                            fontSize: 13.5,
+                          ),
                         ),
                       ),
-                      child: Text(
-                        widget.currentEmail,
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    _ModalField(
+                      label: 'New Email Address',
+                      icon: Icons.email_outlined,
+                      child: TextField(
+                        controller: _newEmailCtrl,
+                        keyboardType: TextInputType.emailAddress,
                         style: const TextStyle(
-                          color: AppColors.textGray,
+                          color: AppColors.textWhite,
                           fontSize: 13.5,
                         ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  _ModalField(
-                    label: 'New Email Address',
-                    icon: Icons.email_outlined,
-                    child: TextField(
-                      controller: _newEmailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      style: const TextStyle(
-                        color: AppColors.textWhite,
-                        fontSize: 13.5,
-                      ),
-                      decoration: _inputDecoration().copyWith(
-                        hintText: 'Enter new email address',
-                        hintStyle: const TextStyle(
-                          color: AppColors.textSubtle,
-                          fontSize: 12.5,
+                        decoration: _inputDecoration().copyWith(
+                          hintText: 'Enter new email address',
+                          hintStyle: const TextStyle(
+                            color: AppColors.textSubtle,
+                            fontSize: 12.5,
+                          ),
                         ),
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 8),
-                  const Text(
-                    'A confirmation link will be sent to your new email. '
-                    'The change takes effect after you click it.',
-                    style: TextStyle(
-                      color: AppColors.textSubtle,
-                      fontSize: 10.5,
+                    const SizedBox(height: 8),
+                    const Text(
+                      'A confirmation link will be sent to your new email. '
+                      'The change takes effect after you click it.',
+                      style: TextStyle(
+                        color: AppColors.textSubtle,
+                        fontSize: 10.5,
+                      ),
                     ),
-                  ),
 
-                  if (_errorMsg != null) ...[
-                    const SizedBox(height: 14),
-                    _ErrorBanner(message: _errorMsg!),
+                    if (_errorMsg != null) ...[
+                      const SizedBox(height: 14),
+                      _ErrorBanner(message: _errorMsg!),
+                    ],
+
+                    const SizedBox(height: 22),
+                    _ModalActions(
+                      loading: _loading,
+                      confirmLabel: 'Send Confirmation',
+                      confirmIcon: Icons.send_outlined,
+                      onConfirm: _submit,
+                      onCancel: () => Navigator.of(context).pop(),
+                    ),
                   ],
-
-                  const SizedBox(height: 22),
-                  _ModalActions(
-                    loading: _loading,
-                    confirmLabel: 'Update Email',
-                    confirmIcon: Icons.save_outlined,
-                    onConfirm: _submit,
-                    onCancel: () => Navigator.of(context).pop(),
-                  ),
                 ],
               ),
             ),
           );
         },
       ),
+    );
+  }
+}
+
+class _EmailConfirmationSent extends StatelessWidget {
+  const _EmailConfirmationSent({required this.newEmail});
+  final String newEmail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF00C48C).withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.mark_email_read_rounded,
+            color: Color(0xFF00C48C),
+            size: 36,
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'Confirmation Email Sent',
+          style: TextStyle(
+            color: AppColors.textWhite,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'We sent a confirmation link to\n$newEmail',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.textGray,
+            fontSize: 13,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Click the link in the email to complete the change.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textSubtle,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: _GradientButton(
+            icon: Icons.check_rounded,
+            label: 'Done',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -377,12 +377,7 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
       builder: (_) => _EmailChangeDialog(
         api:          _api,
         currentEmail: _profile?.email ?? '',
-        onSuccess: (newEmail) {
-          setState(() {
-            _emailCtrl.text = newEmail;
-            _profile = _profile?.copyWith(email: newEmail);
-          });
-        },
+        onSuccess: (_) {},
       ),
     );
   }
@@ -1309,17 +1304,8 @@ class _EmailChangeDialogState extends State<_EmailChangeDialog> {
         newEmail: _newEmailCtrl.text,
         otp:      _verifiedOtp!,
       );
-      final newEmail = _newEmailCtrl.text.trim().toLowerCase();
-      widget.onSuccess(newEmail);
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Email updated successfully.'),
-            backgroundColor: Color(0xFF065F46),
-          ),
-        );
-      }
+      if (!mounted) return;
+      setState(() { _loading = false; _step = 4; });
     } on ProfileApiException catch (e) {
       if (!mounted) return;
       setState(() { _loading = false; _error = e.message; });
@@ -1330,7 +1316,7 @@ class _EmailChangeDialogState extends State<_EmailChangeDialog> {
   Widget build(BuildContext context) {
     return _DialogShell(
       title: 'Change Email',
-      stepLabel: 'Step $_step of 3',
+      stepLabel: _step == 4 ? '' : 'Step $_step of 4',
       onClose: () => Navigator.pop(context),
       child: switch (_step) {
         1 => _StepSendOtp(
@@ -1352,12 +1338,20 @@ class _EmailChangeDialogState extends State<_EmailChangeDialog> {
             setState(() { _step = 1; _error = null; });
           },
         ),
-        _ => _StepNewEmail(
+        3 => _StepNewEmail(
           ctrl:     _newEmailCtrl,
           loading:  _loading,
           error:    _error,
           onSubmit: _submitEmail,
         ),
+        4 => _BusinessEmailConfirmationSent(
+          newEmail: _newEmailCtrl.text,
+          onDone: () {
+            widget.onSuccess(_newEmailCtrl.text.trim().toLowerCase());
+            Navigator.pop(context);
+          },
+        ),
+        _ => const SizedBox.shrink(),
       },
     );
   }
@@ -1741,6 +1735,71 @@ class _StepNewEmail extends StatelessWidget {
           label: 'Update Email',
           isSaving: loading,
           onPressed: onSubmit,
+        ),
+      ],
+    );
+  }
+}
+
+class _BusinessEmailConfirmationSent extends StatelessWidget {
+  const _BusinessEmailConfirmationSent({
+    required this.newEmail,
+    required this.onDone,
+  });
+  final String newEmail;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF00C48C).withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.mark_email_read_rounded,
+            color: Color(0xFF00C48C),
+            size: 36,
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'Confirmation Email Sent',
+          style: TextStyle(
+            color: AppColors.textWhite,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'We sent a confirmation link to\n$newEmail',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.textGray,
+            fontSize: 13,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Click the link in the email to complete the change.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textSubtle,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 24),
+        _ActionButton(
+          icon: Icons.check_rounded,
+          label: 'Done',
+          isSaving: false,
+          onPressed: onDone,
         ),
       ],
     );
