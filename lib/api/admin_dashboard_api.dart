@@ -277,15 +277,15 @@ class AdminDashboardApi extends BaseApi {
     final (start, end) = _dateRange(month, year);
     final (yearStart, yearEnd) = _dateRange(0, year);
 
-    final periodRecords = await _fetchGuestRecords(
-      startDate: start,
-      endDate: end,
+    final response = await get(
+      '/api/dashboard/summary?startDate=$start&endDate=$end&yearStart=$yearStart&yearEnd=$yearEnd',
     );
+    final data = handleResponse(response);
 
+    final periodRecords =
+        List<Map<String, dynamic>>.from(data['periodRecords'] as List);
     final yearRecords =
-        (month == 0)
-            ? periodRecords
-            : await _fetchGuestRecords(startDate: yearStart, endDate: yearEnd);
+        List<Map<String, dynamic>>.from(data['yearRecords'] as List);
 
     final touristsThisPeriod = periodRecords.fold<int>(
       0,
@@ -296,13 +296,12 @@ class AdminDashboardApi extends BaseApi {
       (s, r) => s + (r['total_guests'] as int),
     );
 
-    final stats = await _fetchStats();
-    final activeAccommodations = stats['active'] ?? 0;
-    final pendingRegistrations = stats['pending'] ?? 0;
+    final stats = data['stats'] as Map<String, dynamic>;
+    final activeAccommodations = (stats['activeAccommodations'] as num).toInt();
+    final pendingRegistrations = (stats['pendingRegistrations'] as num).toInt();
 
-    final breakdowns = await _fetchBreakdowns(
-      periodRecords.map((r) => r['id'].toString()).toList(),
-    );
+    final breakdowns =
+        List<Map<String, dynamic>>.from(data['breakdowns'] as List);
 
     int male = 0, female = 0, other = 0;
     for (final breakdown in breakdowns) {
@@ -386,7 +385,27 @@ class AdminDashboardApi extends BaseApi {
             .take(5)
             .toList();
 
-    final accommodationTypes = await _fetchAccommodationTypes(periodRecords);
+    final businessLines =
+        List<Map<String, dynamic>>.from(data['businessLines'] as List);
+    final linesByBusiness = <String, List<String>>{};
+    for (final business in businessLines) {
+      final id = business['id'].toString();
+      linesByBusiness[id] = _extractBusinessLines(business['business_line']);
+    }
+    final typeMap = <String, int>{};
+    for (final record in periodRecords) {
+      final businessId = record['business_id']?.toString();
+      final lines = linesByBusiness[businessId] ?? const [];
+      if (lines.isEmpty) continue;
+      final guestCount = (record['total_guests'] as num?)?.toInt() ?? 0;
+      for (final type in lines) {
+        typeMap[type] = (typeMap[type] ?? 0) + guestCount;
+      }
+    }
+    final accommodationTypes = typeMap.entries
+        .map((e) => AccommodationTypeCount(type: e.key, count: e.value))
+        .toList()
+      ..sort((a, b) => b.count.compareTo(a.count));
 
     return AdminDashboardData(
       stats: AdminDashboardStats(

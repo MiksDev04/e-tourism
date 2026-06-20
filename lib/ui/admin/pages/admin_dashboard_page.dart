@@ -15,6 +15,7 @@ import 'package:app/ui/shared/pages/error_page.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../shared/layouts/admin_layout.dart';
 import '../../../api/admin_dashboard_api.dart';
+import '../../../api/base_api.dart';
 
 // ─── Admin Dashboard Page ─────────────────────────────────────────────────────
 
@@ -75,6 +76,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         setState(() {
           _dashError = 'timeout';
           _errorCode = 408;
+        });
+    } on ApiException catch (e) {
+      if (mounted)
+        setState(() {
+          _dashError = e.message;
+          _errorCode = e.statusCode;
         });
     } catch (e) {
       if (mounted)
