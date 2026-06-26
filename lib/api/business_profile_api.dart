@@ -1,5 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'base_api.dart';
 
 enum BusinessLine {
@@ -200,6 +205,104 @@ class BusinessProfileApi extends BaseApi {
       }
     } on ApiException catch (e) {
       throw ProfileApiException(e.message);
+    }
+  }
+
+  Future<Map<String, String>> uploadBusinessDocuments({
+    PlatformFile? permitFile,
+    PlatformFile? validIdFile,
+  }) async {
+    if (permitFile == null && validIdFile == null) {
+      throw const ProfileApiException('No files selected.');
+    }
+
+    try {
+      final uri = Uri.parse('$baseUrl/api/business/upload');
+      final request = http.MultipartRequest('POST', uri);
+
+      // Attach auth headers (remove Content-Type — multipart sets its own)
+      final h = headers;
+      h.remove('Content-Type');
+      request.headers.addAll(h);
+
+      if (permitFile != null) {
+        if (kIsWeb) {
+          if (permitFile.bytes != null) {
+            request.files.add(http.MultipartFile.fromBytes(
+              'permit_file',
+              permitFile.bytes!,
+              filename: permitFile.name,
+              contentType: _getMediaType(permitFile.name),
+            ));
+          }
+        } else {
+          if (permitFile.path != null) {
+            request.files.add(await http.MultipartFile.fromPath(
+              'permit_file',
+              permitFile.path!,
+              contentType: _getMediaType(permitFile.name),
+            ));
+          }
+        }
+      }
+
+      if (validIdFile != null) {
+        if (kIsWeb) {
+          if (validIdFile.bytes != null) {
+            request.files.add(http.MultipartFile.fromBytes(
+              'valid_id',
+              validIdFile.bytes!,
+              filename: validIdFile.name,
+              contentType: _getMediaType(validIdFile.name),
+            ));
+          }
+        } else {
+          if (validIdFile.path != null) {
+            request.files.add(await http.MultipartFile.fromPath(
+              'valid_id',
+              validIdFile.path!,
+              contentType: _getMediaType(validIdFile.name),
+            ));
+          }
+        }
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return {
+          'permit_file_url': (data['permit_file_url'] as String?) ?? '',
+          'valid_id_url': (data['valid_id_url'] as String?) ?? '',
+        };
+      } else {
+        String message = 'Upload failed.';
+        try {
+          final data = jsonDecode(response.body);
+          message = data['message'] ?? message;
+        } catch (_) {}
+        throw ProfileApiException(message);
+      }
+    } on ProfileApiException {
+      rethrow;
+    } catch (e) {
+      throw ProfileApiException('Upload failed: $e');
+    }
+  }
+
+  MediaType _getMediaType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return MediaType('application', 'pdf');
+      case 'png':
+        return MediaType('image', 'png');
+      case 'jpg':
+      case 'jpeg':
+        return MediaType('image', 'jpeg');
+      default:
+        return MediaType('application', 'octet-stream');
     }
   }
 }

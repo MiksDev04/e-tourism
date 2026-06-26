@@ -4,6 +4,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
+import '../widgets/business_document_preview_modal.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/services/connectivity_service.dart';
@@ -123,8 +125,13 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
   BusinessModel? _business;
 
   // ── Save state ────────────────────────────────────────────────────────────
-  bool _isSavingAccount  = false;
-  bool _isSavingBusiness = false;
+  bool _isSavingAccount   = false;
+  bool _isSavingBusiness  = false;
+  bool _isSavingDocuments = false;
+
+  // ── Document upload state ─────────────────────────────────────────────────
+  PlatformFile? _selectedPermitFile;
+  PlatformFile? _selectedValidIdFile;
 
   // ── Account controllers ───────────────────────────────────────────────────
   final _fullNameCtrl = TextEditingController();
@@ -152,18 +159,52 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
   List<BusinessLine> _selectedLines  = [BusinessLine.hotel];
   String? _selectedBarangay;
 
+  // ── Validation ────────────────────────────────────────────────────────────
+  String? _phoneError;
+  String? _roomsError;
+
+  static final _phoneRe = RegExp(r'^09\d{9}$');
+
+  void _validatePhone() {
+    final stripped = _phoneCtrl.text.trim().replaceAll(RegExp(r'[-\s]'), '');
+    String? err;
+    if (stripped.isEmpty) {
+      err = null;
+    } else if (!_phoneRe.hasMatch(stripped)) {
+      err = 'Use format 09XX-XXX-XXXX';
+    }
+    if (_phoneError != err) setState(() => _phoneError = err);
+  }
+
+  void _validateRooms() {
+    final n = int.tryParse(_totalRoomsCtrl.text.trim());
+    String? err;
+    if (_totalRoomsCtrl.text.trim().isEmpty) {
+      err = null;
+    } else if (n == null) {
+      err = 'Enter a valid number';
+    } else if (n <= 0) {
+      err = 'Must be at least 1';
+    }
+    if (_roomsError != err) setState(() => _roomsError = err);
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
+    _phoneCtrl.addListener(_validatePhone);
+    _totalRoomsCtrl.addListener(_validateRooms);
     _subscribeConnectivity();
-    _loadData(); // handles its own offline pre-check — no separate prime needed
+    _loadData();
   }
 
   @override
   void dispose() {
     _connectivitySub?.cancel();
+    _phoneCtrl.removeListener(_validatePhone);
+    _totalRoomsCtrl.removeListener(_validateRooms);
     for (final c in [
       _fullNameCtrl, _usernameCtrl, _emailCtrl, _phoneCtrl,
       _businessNameCtrl, _tradenameCtrl, _ownerFirstCtrl, _ownerMiddleCtrl,
@@ -307,17 +348,23 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
   // ── Save actions ──────────────────────────────────────────────────────────
 
   Future<void> _saveAccountInfo() async {
+    _validatePhone();
+    final phone = _phoneCtrl.text.trim().replaceAll(RegExp(r'[-\s]'), '');
+    if (_phoneError != null || phone.isEmpty) {
+      if (phone.isEmpty) setState(() => _phoneError = 'Phone number is required');
+      return;
+    }
     setState(() => _isSavingAccount = true);
     try {
       await _api.updateAccountInfo(
         fullName: _fullNameCtrl.text,
         username: _usernameCtrl.text,
-        phone:    _phoneCtrl.text,
+        phone:    phone,
       );
       _profile = _profile?.copyWith(
         fullName: _fullNameCtrl.text.trim(),
         username: _usernameCtrl.text.trim(),
-        phone:    _phoneCtrl.text.trim(),
+        phone:    phone,
       );
       _showSnack('Account information updated.', isError: false);
     } on ProfileApiException catch (e) {
@@ -332,6 +379,8 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
       _showSnack('No business record found.');
       return;
     }
+    _validateRooms();
+    if (_roomsError != null) return;
     setState(() => _isSavingBusiness = true);
     try {
       await _api.updateBusinessInfo(
@@ -343,7 +392,7 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
         ownerLastName:      _ownerLastCtrl.text,
         businessType:       _selectedBusinessType,
         businessLine:       _selectedLines,
-        totalRooms:         int.tryParse(_totalRoomsCtrl.text) ?? 0,
+        totalRooms:         int.parse(_totalRoomsCtrl.text.trim()),
         street:             _streetCtrl.text,
         barangay:           _selectedBarangay ?? _barangayCtrl.text,
         cityMunicipality:   _fixedCityMunicipality,
@@ -357,6 +406,88 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
       _showSnack(e.message);
     } finally {
       if (mounted) setState(() => _isSavingBusiness = false);
+    }
+  }
+
+  // ── Document upload ───────────────────────────────────────────────────────
+
+  Future<void> _pickPermitFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+    );
+    if (result != null && result.files.isNotEmpty) {
+      setState(() => _selectedPermitFile = result.files.first);
+    }
+  }
+
+  Future<void> _pickValidIdFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+    );
+    if (result != null && result.files.isNotEmpty) {
+      setState(() => _selectedValidIdFile = result.files.first);
+    }
+  }
+
+  void _viewFile(BuildContext context, String title, String url) {
+    if (url.isEmpty) {
+      _showSnack('Document URL not available.');
+      return;
+    }
+    showDocumentPreviewModal(context, title, url);
+  }
+
+  Future<void> _uploadDocuments() async {
+    if (_selectedPermitFile == null && _selectedValidIdFile == null) {
+      _showSnack('Select at least one file to upload.');
+      return;
+    }
+    setState(() => _isSavingDocuments = true);
+    try {
+      final urls = await _api.uploadBusinessDocuments(
+        permitFile: _selectedPermitFile,
+        validIdFile: _selectedValidIdFile,
+      );
+      if (!mounted) return;
+      final b = _business;
+      if (b != null) {
+        _business = BusinessModel(
+          id: b.id,
+          userId: b.userId,
+          businessName: b.businessName,
+          tradename: b.tradename,
+          permitNumber: b.permitNumber,
+          registrationNumber: b.registrationNumber,
+          street: b.street,
+          barangay: b.barangay,
+          cityMunicipality: b.cityMunicipality,
+          province: b.province,
+          region: b.region,
+          totalRooms: b.totalRooms,
+          permitFileUrl: (urls['permit_file_url'] ?? '').isNotEmpty
+              ? urls['permit_file_url'] : b.permitFileUrl,
+          validIdUrl: (urls['valid_id_url'] ?? '').isNotEmpty
+              ? urls['valid_id_url'] : b.validIdUrl,
+          status: b.status,
+          remarks: b.remarks,
+          businessLine: b.businessLine,
+          ownerFirstName: b.ownerFirstName,
+          ownerMiddleName: b.ownerMiddleName,
+          ownerLastName: b.ownerLastName,
+          businessType: b.businessType,
+        );
+      }
+      setState(() {
+        _selectedPermitFile = null;
+        _selectedValidIdFile = null;
+      });
+      _showSnack('Documents uploaded successfully.', isError: false);
+    } on ProfileApiException catch (e) {
+      _showSnack(e.message);
+    } finally {
+      if (mounted) setState(() => _isSavingDocuments = false);
     }
   }
 
@@ -430,11 +561,24 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
                                 isSaving:     _isSavingAccount,
                                 onSave:       _saveAccountInfo,
                                 isNarrow:     isNarrow,
+                                phoneError:   _phoneError,
                               ),
                               const SizedBox(height: 16),
                               _SecurityCard(
                                 onChangePassword: _showChangePasswordDialog,
                                 onChangeEmail:    _showChangeEmailDialog,
+                              ),
+                              const SizedBox(height: 16),
+                              _BusinessDocumentsCard(
+                                business:            _business,
+                                selectedPermitFile:   _selectedPermitFile,
+                                selectedValidIdFile:  _selectedValidIdFile,
+                                isSaving:             _isSavingDocuments,
+                                onPickPermitFile:     _pickPermitFile,
+                                onPickValidIdFile:    _pickValidIdFile,
+                                onViewFile:           _viewFile,
+                                onUpload:             _uploadDocuments,
+                                hasRecord:            _business != null,
                               ),
                               const SizedBox(height: 16),
                               _BusinessInfoCard(
@@ -462,6 +606,7 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
                                 onSave:    _saveBusinessInfo,
                                 isNarrow:  isNarrow,
                                 hasRecord: _business != null,
+                                roomsError: _roomsError,
                                 selectedBarangay: _selectedBarangay,
                                 onBarangayChanged: (v) => setState(() {
                                   _selectedBarangay = v;
@@ -616,12 +761,14 @@ class _AccountInfoCard extends StatelessWidget {
     required this.isSaving,
     required this.onSave,
     required this.isNarrow,
+    this.phoneError,
   });
 
   final TextEditingController fullNameCtrl, usernameCtrl, emailCtrl, phoneCtrl;
   final bool isSaving;
   final VoidCallback onSave;
   final bool isNarrow;
+  final String? phoneError;
 
   @override
   Widget build(BuildContext context) {
@@ -659,9 +806,14 @@ class _AccountInfoCard extends StatelessWidget {
           _LabeledField(
             label: 'Phone',
             icon: Icons.phone_outlined,
+            error: phoneError,
             child: _InputField(
                 controller: phoneCtrl,
-                keyboardType: TextInputType.phone),
+                keyboardType: TextInputType.phone,
+                hint: '09XX-XXX-XXXX',
+                inputFormatters: [
+                  _PhoneFormatter(),
+                ]),
           ),
           const SizedBox(height: 22),
           _ActionButton(
@@ -808,6 +960,7 @@ class _BusinessInfoCard extends StatelessWidget {
     required this.hasRecord,
     required this.selectedBarangay,
     required this.onBarangayChanged,
+    this.roomsError,
   });
 
   final TextEditingController businessNameCtrl, tradenameCtrl;
@@ -825,6 +978,7 @@ class _BusinessInfoCard extends StatelessWidget {
   final bool isNarrow;
   final bool hasRecord;
   final String? selectedBarangay;
+  final String? roomsError;
   final ValueChanged<String?> onBarangayChanged;
 
   @override
@@ -870,9 +1024,11 @@ class _BusinessInfoCard extends StatelessWidget {
             _LabeledField(
               label: 'Total Rooms / Units',
               icon: Icons.bed_outlined,
+              error: roomsError,
               child: _InputField(
                   controller: totalRoomsCtrl,
-                  keyboardType: TextInputType.number),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
             ),
           ] else
             Row(children: [
@@ -889,9 +1045,11 @@ class _BusinessInfoCard extends StatelessWidget {
               Expanded(child: _LabeledField(
                 label: 'Total Rooms / Units',
                 icon: Icons.bed_outlined,
+                error: roomsError,
                 child: _InputField(
                     controller: totalRoomsCtrl,
-                    keyboardType: TextInputType.number),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
               )),
             ]),
           const SizedBox(height: 14),
@@ -1021,6 +1179,233 @@ class _BusinessInfoCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─── Business Documents Card ──────────────────────────────────────────────────
+
+class _BusinessDocumentsCard extends StatelessWidget {
+  const _BusinessDocumentsCard({
+    required this.business,
+    required this.selectedPermitFile,
+    required this.selectedValidIdFile,
+    required this.isSaving,
+    required this.onPickPermitFile,
+    required this.onPickValidIdFile,
+    required this.onViewFile,
+    required this.onUpload,
+    required this.hasRecord,
+  });
+
+  final BusinessModel? business;
+  final PlatformFile? selectedPermitFile, selectedValidIdFile;
+  final bool isSaving, hasRecord;
+  final VoidCallback onPickPermitFile, onPickValidIdFile, onUpload;
+  final void Function(BuildContext context, String title, String url) onViewFile;
+
+  String _fileNameFromUrl(String? url) {
+    if (url == null || url.isEmpty) return '';
+    try {
+      final segments = Uri.parse(url).pathSegments;
+      return segments.isNotEmpty ? segments.last : url;
+    } catch (_) {
+      return url;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle(
+              icon: Icons.description_outlined, label: 'Documents'),
+          const SizedBox(height: 20),
+
+          // ── Business Permit ─────────────────────────────────────────────
+          const _SubLabel(label: 'Business Permit'),
+          const SizedBox(height: 12),
+            _DocumentRow(
+            label: 'Business Permit',
+            docTitle: 'Business Permit',
+            businessName: business?.businessName ?? '',
+            fileUrl: business?.permitFileUrl,
+            fileName: _fileNameFromUrl(business?.permitFileUrl),
+            selectedFile: selectedPermitFile,
+            onPickFile: onPickPermitFile,
+            onViewFile: onViewFile,
+          ),
+          const SizedBox(height: 20),
+
+          // ── Valid ID ────────────────────────────────────────────────────
+          const _SubLabel(label: 'Valid ID'),
+          const SizedBox(height: 12),
+          _DocumentRow(
+            label: 'Valid ID',
+            docTitle: 'Valid ID',
+            businessName: business?.businessName ?? '',
+            fileUrl: business?.validIdUrl,
+            fileName: _fileNameFromUrl(business?.validIdUrl),
+            selectedFile: selectedValidIdFile,
+            onPickFile: onPickValidIdFile,
+            onViewFile: onViewFile,
+          ),
+          const SizedBox(height: 22),
+
+          if (!hasRecord)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'No business record found. Please contact the admin.',
+                style: TextStyle(color: Colors.amber.shade400, fontSize: 12.5),
+              ),
+            ),
+
+          _ActionButton(
+            icon: Icons.upload_file_outlined,
+            label: 'Upload Documents',
+            isSaving: isSaving,
+            onPressed: hasRecord ? onUpload : () {},
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DocumentRow extends StatelessWidget {
+  const _DocumentRow({
+    required this.label,
+    required this.docTitle,
+    required this.businessName,
+    this.fileUrl,
+    this.fileName,
+    this.selectedFile,
+    required this.onPickFile,
+    required this.onViewFile,
+  });
+
+  final String label;
+  final String docTitle;
+  final String businessName;
+  final String? fileUrl, fileName;
+  final PlatformFile? selectedFile;
+  final VoidCallback onPickFile;
+  final void Function(BuildContext context, String title, String url) onViewFile;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Existing file
+        if (fileUrl != null && fileUrl!.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.inputBackground,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.inputBorder),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.insert_drive_file_outlined,
+                    color: AppColors.primaryCyan, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '$businessName $docTitle',
+                    style: const TextStyle(
+                        color: AppColors.textWhite, fontSize: 12.5),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => onViewFile(context, docTitle, fileUrl!),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryCyan.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.open_in_new_rounded,
+                            color: AppColors.primaryCyan, size: 14),
+                        SizedBox(width: 4),
+                        Text('View',
+                            style: TextStyle(
+                                color: AppColors.primaryCyan,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.inputBackground,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.cardBorder),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.cloud_off_outlined,
+                    color: AppColors.textGray, size: 18),
+                SizedBox(width: 10),
+                Text('Not uploaded yet',
+                    style: TextStyle(
+                        color: AppColors.textGray, fontSize: 12.5)),
+              ],
+            ),
+          ),
+        const SizedBox(height: 10),
+
+        // File picker
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: onPickFile,
+            icon: const Icon(Icons.attach_file_outlined, size: 16),
+            label: Text(
+              selectedFile != null
+                  ? selectedFile!.name
+                  : 'Choose $label',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: selectedFile != null
+                    ? AppColors.primaryCyan
+                    : AppColors.textGray,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(
+                color: selectedFile != null
+                    ? AppColors.primaryCyan
+                    : AppColors.inputBorder,
+              ),
+              foregroundColor: selectedFile != null
+                  ? AppColors.primaryCyan
+                  : AppColors.textGray,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1881,11 +2266,12 @@ class _SubLabel extends StatelessWidget {
 
 class _LabeledField extends StatelessWidget {
   const _LabeledField(
-      {required this.label, required this.child, this.icon});
+      {required this.label, required this.child, this.icon, this.error});
 
   final String label;
   final Widget child;
   final IconData? icon;
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
@@ -1905,6 +2291,11 @@ class _LabeledField extends StatelessWidget {
         ]),
         const SizedBox(height: 7),
         child,
+        if (error != null) ...[
+          const SizedBox(height: 4),
+          Text(error!,
+              style: const TextStyle(color: Color(0xFFF87171), fontSize: 11)),
+        ],
       ],
     );
   }
@@ -1916,18 +2307,28 @@ class _InputField extends StatelessWidget {
   const _InputField({
     required this.controller,
     this.keyboardType = TextInputType.text,
+    this.inputFormatters,
+    this.hint,
   });
 
   final TextEditingController controller;
   final TextInputType keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+  final String? hint;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
       style: const TextStyle(color: AppColors.textWhite, fontSize: 13.5),
-      decoration: _inputDeco(),
+      decoration: _inputDeco().copyWith(
+        hintText: hint,
+        hintStyle: hint != null
+            ? const TextStyle(color: AppColors.textSubtle, fontSize: 12.5)
+            : null,
+      ),
     );
   }
 }
@@ -2134,3 +2535,22 @@ InputDecoration _inputDeco() => InputDecoration(
     borderSide: const BorderSide(color: AppColors.primaryCyan, width: 1.5),
   ),
 );
+
+class _PhoneFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue, TextEditingValue newValue) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 11) return oldValue;
+    final buf = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      if (i == 4 || i == 7) buf.write('-');
+      buf.write(digits[i]);
+    }
+    final formatted = buf.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}

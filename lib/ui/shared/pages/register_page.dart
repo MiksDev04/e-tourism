@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:app/api/register_api.dart';
 import 'package:app/core/enums/business_enums.dart';
 import 'package:app/router/app_routes.dart';
@@ -31,7 +32,7 @@ class _V {
 
   static final _usernameRe = RegExp(r'^[a-zA-Z0-9_]{3,20}$');
   static final _emailRe = RegExp(r'^[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}$');
-  static final _phoneRe = RegExp(r'^(09|\+639)\d{9}$');
+  static final _phoneRe = RegExp(r'^09\d{9}$');
 
   static String? fullName(String v) =>
       v.trim().isEmpty ? 'Full name is required' : null;
@@ -56,7 +57,7 @@ class _V {
     final stripped = v.trim().replaceAll(RegExp(r'[-\s]'), '');
     if (stripped.isEmpty) return 'Phone number is required';
     if (!_phoneRe.hasMatch(stripped)) {
-      return 'Use format 09XX-XXX-XXXX or +639XXXXXXXXX';
+      return 'Use format 09XX-XXX-XXXX';
     }
     return null;
   }
@@ -1119,6 +1120,7 @@ class _Step1FormState extends State<_Step1Form> {
             keyboardType: TextInputType.phone,
             hasError: _show('phone') && _V.phone(widget.phoneCtrl.text) != null,
             onChanged: (_) => _touch('phone'),
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly, _PhoneFormatter()],
           ),
         ),
         const SizedBox(height: 16),
@@ -1835,6 +1837,25 @@ class _BarangayAutocompleteState extends State<_BarangayAutocomplete> {
   }
 }
 
+class _PhoneFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue, TextEditingValue newValue) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 11) return oldValue;
+    final buf = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      if (i == 4 || i == 7) buf.write('-');
+      buf.write(digits[i]);
+    }
+    final formatted = buf.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
 class _Input extends StatelessWidget {
   const _Input({
     required this.controller,
@@ -1845,6 +1866,7 @@ class _Input extends StatelessWidget {
     this.enabled = true,
     this.onChanged,
     this.suffixIcon,
+    this.inputFormatters,
   });
 
   final TextEditingController controller;
@@ -1855,6 +1877,7 @@ class _Input extends StatelessWidget {
   final bool enabled;
   final ValueChanged<String>? onChanged;
   final Widget? suffixIcon;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -1871,6 +1894,7 @@ class _Input extends StatelessWidget {
       keyboardType: keyboardType,
       enabled: enabled,
       onChanged: onChanged,
+      inputFormatters: inputFormatters,
       style: TextStyle(color: textColor, fontSize: 13.5),
       decoration: InputDecoration(
         hintText: hint,

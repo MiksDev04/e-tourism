@@ -32,23 +32,37 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
   bool _savingInfo = false;
   String? _fetchError;
   int? _errorCode;
+  String? _phoneError;
 
   ProfileModel? _profile;
+
+  static final _phoneRe = RegExp(r'^09\d{9}$');
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
+    _phoneCtrl.addListener(_validatePhone);
     _loadProfile();
   }
 
   @override
   void dispose() {
+    _phoneCtrl.removeListener(_validatePhone);
     _fullNameCtrl.dispose();
     _usernameCtrl.dispose();
     _phoneCtrl.dispose();
     super.dispose();
+  }
+
+  void _validatePhone() {
+    final stripped = _phoneCtrl.text.trim().replaceAll(RegExp(r'[-\s]'), '');
+    String? error;
+    if (stripped.isNotEmpty && !_phoneRe.hasMatch(stripped)) {
+      error = 'Use format 09XX-XXX-XXXX';
+    }
+    if (_phoneError != error) setState(() => _phoneError = error);
   }
 
   // ── Data loading ─────────────────────────────────────────────────────────────
@@ -109,12 +123,20 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
 
   Future<void> _saveAccountInfo() async {
     if (_savingInfo) return;
+
+    _validatePhone();
+    final phone = _phoneCtrl.text.trim().replaceAll(RegExp(r'[-\s]'), '');
+    if (_phoneError != null || phone.isEmpty) {
+      if (phone.isEmpty) setState(() => _phoneError = 'Phone number is required');
+      return;
+    }
+
     setState(() => _savingInfo = true);
     try {
       await _api.updateAccountInfo(
         fullName: _fullNameCtrl.text,
         username: _usernameCtrl.text,
-        phone: _phoneCtrl.text,
+        phone: phone,
       );
       if (!mounted) return;
       
@@ -124,7 +146,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
         await SessionService.instance.save(currentSession.copyWith(
           fullName: _fullNameCtrl.text.trim(),
           username: _usernameCtrl.text.trim(),
-          phone:    _phoneCtrl.text.trim(),
+          phone:    phone,
         ));
       }
 
@@ -250,6 +272,7 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
                             phoneCtrl: _phoneCtrl,
                             loading: _savingInfo,
                             onSave: _saveAccountInfo,
+                            phoneError: _phoneError,
                           ),
                           const SizedBox(height: 16),
                           _SecureActionCard(
@@ -1647,12 +1670,14 @@ class _AccountInfoCard extends StatelessWidget {
     required this.phoneCtrl,
     required this.loading,
     required this.onSave,
+    this.phoneError,
   });
   final TextEditingController fullNameCtrl;
   final TextEditingController usernameCtrl;
   final TextEditingController phoneCtrl;
   final bool loading;
   final VoidCallback onSave;
+  final String? phoneError;
 
   @override
   Widget build(BuildContext context) {
@@ -1700,6 +1725,7 @@ class _AccountInfoCard extends StatelessWidget {
           _LabeledField(
             label: 'Phone Number',
             icon: Icons.phone_outlined,
+            error: phoneError,
             child: _PhoneInputField(controller: phoneCtrl),
           ),
           const SizedBox(height: 22),
@@ -1744,11 +1770,13 @@ class _LabeledField extends StatelessWidget {
     required this.child,
     this.icon,
     this.hint,
+    this.error,
   });
   final String label;
   final Widget child;
   final IconData? icon;
   final String? hint;
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
@@ -1780,6 +1808,13 @@ class _LabeledField extends StatelessWidget {
         ],
         const SizedBox(height: 7),
         child,
+        if (error != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            error!,
+            style: const TextStyle(color: Color(0xFFF87171), fontSize: 11),
+          ),
+        ],
       ],
     );
   }
@@ -1806,6 +1841,25 @@ class _InputField extends StatelessWidget {
   }
 }
 
+class _PhoneFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue, TextEditingValue newValue) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 11) return oldValue;
+    final buf = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      if (i == 4 || i == 7) buf.write('-');
+      buf.write(digits[i]);
+    }
+    final formatted = buf.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
 class _PhoneInputField extends StatelessWidget {
   const _PhoneInputField({required this.controller});
   final TextEditingController controller;
@@ -1815,9 +1869,18 @@ class _PhoneInputField extends StatelessWidget {
     return TextField(
       controller: controller,
       keyboardType: TextInputType.phone,
-      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      inputFormatters: [
+        _PhoneFormatter(),
+      ],
       style: const TextStyle(color: AppColors.textWhite, fontSize: 13.5),
-      decoration: _inputDecoration(),
+      decoration: _inputDecoration().copyWith(
+        counterText: '',
+        hintText: '09XX-XXX-XXXX',
+        hintStyle: const TextStyle(
+          color: AppColors.textSubtle,
+          fontSize: 12.5,
+        ),
+      ),
     );
   }
 }
