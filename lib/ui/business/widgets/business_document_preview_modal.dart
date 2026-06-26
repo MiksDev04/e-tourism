@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:printing/printing.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/file_saver.dart';
 import '../../../core/services/session_service.dart';
 
@@ -147,7 +148,9 @@ class _DocumentPreviewModalState extends State<DocumentPreviewModal> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Failed to load document: $e';
+          _error = isNetworkError(e)
+              ? 'No internet connection. Please check your network and try again.'
+              : 'Something went wrong. Please try again.';
           _loading = false;
         });
       }

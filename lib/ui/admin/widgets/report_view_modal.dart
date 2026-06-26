@@ -7,6 +7,7 @@ import 'package:app/core/services/file_saver.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:printing/printing.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/connectivity_service.dart';
 import '../../../api/admin_report_api.dart';
 
 // ─── Report Viewer Modal ──────────────────────────────────────────────────────
@@ -69,7 +70,9 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = isNetworkError(e)
+            ? 'No internet connection. Please check your network and try again.'
+            : 'Something went wrong. Please try again.';
         _loading = false;
       });
     }
@@ -192,7 +195,16 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
               child: _loading
                   ? const _LoadingView()
                   : _error != null
-                  ? _ErrorView(error: _error!)
+                  ? _ErrorView(
+                      error: _error!,
+                      onRetry: () {
+                        setState(() {
+                          _error = null;
+                          _loading = true;
+                        });
+                        _loadPdf();
+                      },
+                    )
                   : _PdfView(pdfBytes: _pdfBytes!, zoomScale: _zoomScale),
             ),
           ],
@@ -685,8 +697,9 @@ class _LoadingView extends StatelessWidget {
 }
 
 class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.error});
+  const _ErrorView({required this.error, this.onRetry});
   final String error;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -716,6 +729,20 @@ class _ErrorView extends StatelessWidget {
               style: const TextStyle(color: AppColors.textGray, fontSize: 12),
               textAlign: TextAlign.center,
             ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: onRetry,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryCyan,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Retry'),
+              ),
+            ],
           ],
         ),
       ),
