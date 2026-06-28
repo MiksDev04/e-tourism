@@ -753,7 +753,7 @@ class BusinessGuestRecordApi extends BaseApi {
     final normalised = ageGroup.trim().replaceAll('–', '-');
     switch (normalised) {
       case '0-9':
-      case '1-9':               return '1-9';
+      case '1-9':               return '0-9';
       case '10-17':             return '10-17';
       case '18-25':             return '18-25';
       case '26-35':             return '26-35';

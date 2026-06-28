@@ -20,7 +20,7 @@ class BaseApi {
 
   String? get apiKey {
     if (kIsWeb) {
-      return const String.fromEnvironment('API_KEY', defaultValue: '');
+      return const String.fromEnvironment('API_KEY', defaultValue: 'tourism_app_v2_secret_key_2026');
     }
     return dotenv.env['API_KEY'];
   }
