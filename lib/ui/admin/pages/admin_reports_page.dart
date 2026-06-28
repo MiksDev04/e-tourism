@@ -33,6 +33,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   bool _isGenerating = false;
   String _filterMonth = '';
   String _filterYear = '';
+  String _filterBusinessName = '';
   int _currentPage = 0;
   int _pageSize = 10;
 
@@ -62,6 +63,17 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     '2023',
     '2022',
   ];
+
+  List<String> get _businessNameOptions {
+    final names = _reports
+        .map((r) => r.businessName)
+        .whereType<String>()
+        .where((n) => n.isNotEmpty && n != 'Total')
+        .toSet()
+        .toList();
+    names.sort();
+    return ['All', 'Total', ...names];
+  }
 
   @override
   void initState() {
@@ -212,6 +224,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     setState(() {
       _filterMonth = '';
       _filterYear = '';
+      _filterBusinessName = '';
       _currentPage = 0;
     });
   }
@@ -224,6 +237,9 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     if (_filterYear.isNotEmpty && _filterYear != 'All Years') {
       final y = int.tryParse(_filterYear);
       if (y != null) list = list.where((r) => r.periodYear == y).toList();
+    }
+    if (_filterBusinessName.isNotEmpty && _filterBusinessName != 'All') {
+      list = list.where((r) => r.businessName == _filterBusinessName).toList();
     }
     return list;
   }
@@ -311,16 +327,23 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                         ),
                         const SizedBox(height: 16),
                         _FilterSection(
+                          isNarrow: isNarrow,
                           months: _months,
                           years: _years,
+                          businessNameOptions: _businessNameOptions,
                           selectedMonth: _filterMonth,
                           selectedYear: _filterYear,
+                          selectedBusinessName: _filterBusinessName,
                           onMonthChanged: (v) => setState(() {
                             _filterMonth = v ?? '';
                             _resetPage();
                           }),
                           onYearChanged: (v) => setState(() {
                             _filterYear = v ?? '';
+                            _resetPage();
+                          }),
+                          onBusinessNameChanged: (v) => setState(() {
+                            _filterBusinessName = v ?? '';
                             _resetPage();
                           }),
                           onClear: _clearFilters,
@@ -1146,25 +1169,84 @@ class _DropdownField<T> extends StatelessWidget {
 
 class _FilterSection extends StatelessWidget {
   const _FilterSection({
+    required this.isNarrow,
     required this.months,
     required this.years,
+    required this.businessNameOptions,
     required this.selectedMonth,
     required this.selectedYear,
+    required this.selectedBusinessName,
     required this.onMonthChanged,
     required this.onYearChanged,
+    required this.onBusinessNameChanged,
     required this.onClear,
   });
 
+  final bool isNarrow;
   final List<String> months;
   final List<String> years;
+  final List<String> businessNameOptions;
   final String selectedMonth;
   final String selectedYear;
+  final String selectedBusinessName;
   final void Function(String?) onMonthChanged;
   final void Function(String?) onYearChanged;
+  final void Function(String?) onBusinessNameChanged;
   final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
+    final monthValue = selectedMonth.isEmpty ? 'All Months' : selectedMonth;
+    final yearValue = selectedYear.isEmpty ? 'All Years' : selectedYear;
+    final nameValue =
+        selectedBusinessName.isEmpty ? 'All' : selectedBusinessName;
+
+    if (isNarrow) {
+      return SizedBox(
+        width: double.infinity,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.cardBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _FilterDropdown(
+                      label: 'Month',
+                      value: monthValue,
+                      items: months,
+                      onChanged: onMonthChanged,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: _FilterDropdown(
+                      label: 'Year',
+                      value: yearValue,
+                      items: years,
+                      onChanged: onYearChanged,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _FilterDropdown(
+                label: 'Business',
+                value: nameValue,
+                items: businessNameOptions,
+                onChanged: onBusinessNameChanged,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1176,22 +1258,28 @@ class _FilterSection extends StatelessWidget {
       child: GridView.count(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 2,
+        crossAxisCount: 3,
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
         mainAxisExtent: 58,
         children: [
           _FilterDropdown(
             label: 'Month',
-            value: selectedMonth.isEmpty ? 'All Months' : selectedMonth,
+            value: monthValue,
             items: months,
             onChanged: onMonthChanged,
           ),
           _FilterDropdown(
             label: 'Year',
-            value: selectedYear.isEmpty ? 'All Years' : selectedYear,
+            value: yearValue,
             items: years,
             onChanged: onYearChanged,
+          ),
+          _FilterDropdown(
+            label: 'Business',
+            value: nameValue,
+            items: businessNameOptions,
+            onChanged: onBusinessNameChanged,
           ),
         ],
       ),

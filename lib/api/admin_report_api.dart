@@ -70,7 +70,7 @@ class GeneratedReport {
     periodYear: row['period_year'] as int,
     batchId: row['batch_id'] as String?,
     businessId: row['business_id'] as String?,
-    businessName: row['business_name'] as String?,
+    businessName: row['report_type'] == 'total' ? 'Total' : (row['business_name'] as String?),
     fileUrl: row['file_url'] as String?,
     pdfUrl: row['pdf_url'] as String?,
     generatedAt: DateTime.parse(row['generated_at'] as String),
