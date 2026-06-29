@@ -146,6 +146,24 @@ abstract final class AppRouter {
       );
     }
 
+    // ── Root / empty route (browser back button to initial /) ──────────────
+    if (routeName.isEmpty || routeName == '/') {
+      final session = SessionService.instance.current;
+      if (session == null) {
+        return _fade(const LoginPage(), const RouteSettings(name: AppRoutes.login));
+      }
+      return _fade(
+        session.role == 'admin'
+            ? const AdminDashboardPage()
+            : const BusinessDashboardPage(),
+        RouteSettings(
+          name: session.role == 'admin'
+              ? AppRoutes.adminDashboard
+              : AppRoutes.businessDashboard,
+        ),
+      );
+    }
+
     // ── Normal routing ───────────────────────────────────────────────────────
     return switch (routeName) {
       AppRoutes.login => _fade(const LoginPage(), settings),

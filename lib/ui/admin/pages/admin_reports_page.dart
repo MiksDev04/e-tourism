@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:app/core/constants/app_colors.dart';
 import 'package:app/ui/shared/layouts/admin_layout.dart';
 import 'package:app/ui/shared/widgets/paginator.dart';
+import 'package:app/ui/shared/widgets/report_loading_overlay.dart';
 import 'package:app/api/admin_report_api.dart';
 import 'package:app/ui/admin/widgets/report_view_modal.dart';
 
@@ -30,7 +32,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   bool _loadingReports = false;
   int? _errorCode;
   String? _fetchError;
-  bool _isGenerating = false;
+  bool _generationCancelled = false;
   String _filterMonth = '';
   String _filterYear = '';
   String _filterBusinessName = '';
@@ -128,19 +130,35 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
     required int year,
     required String scope,
   }) async {
-    setState(() => _isGenerating = true);
+    _generationCancelled = false;
+
+    if (!mounted) return;
+    unawaited(showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ReportLoadingOverlay(
+        onInternetLost: () => _generationCancelled = true,
+        onDismiss: () {
+          Navigator.pop(context);
+          _showError('Report generation failed due to network issues.');
+        },
+      ),
+    ));
+
     try {
       await _reportService.generateAndUpload(
         ReportParams(month: month, year: year, scope: scope),
       );
+      if (!mounted || _generationCancelled) return;
+      if (mounted) Navigator.pop(context);
       await _fetchReports();
       if (!mounted) return;
       _showSuccess('Report generated successfully');
     } catch (e) {
       if (!mounted) return;
+      if (_generationCancelled) return;
+      if (mounted) Navigator.pop(context);
       _showError('Error generating report: $e');
-    } finally {
-      if (mounted) setState(() => _isGenerating = false);
     }
   }
 
@@ -322,7 +340,6 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                       children: [
                         _PageHeader(
                           isNarrow: isNarrow,
-                          isGenerating: _isGenerating,
                           onGenerateTap: _showGenerateDialog,
                         ),
                         const SizedBox(height: 16),
@@ -353,16 +370,6 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                           icon: Icons.folder_zip_rounded,
                           label: 'Generated Reports',
                           subtitle: 'One file per establishment',
-                          trailing: _isGenerating
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.primaryCyan,
-                                  ),
-                                )
-                              : null,
                         ),
                         const SizedBox(height: 12),
                         if (_loadingReports)
@@ -415,13 +422,11 @@ class _SectionLabel extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.subtitle,
-    this.trailing,
   });
 
   final IconData icon;
   final String label;
   final String subtitle;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -437,7 +442,7 @@ class _SectionLabel extends StatelessWidget {
           ),
           child: Icon(icon, color: AppColors.primaryCyan, size: 17),
         ),
-        const SizedBox(width: 10),
+          const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,7 +462,6 @@ class _SectionLabel extends StatelessWidget {
             ],
           ),
         ),
-        if (trailing != null) trailing!,
       ],
     );
   }
@@ -1363,12 +1367,10 @@ class _FilterDropdown extends StatelessWidget {
 class _PageHeader extends StatelessWidget {
   const _PageHeader({
     required this.isNarrow,
-    required this.isGenerating,
     required this.onGenerateTap,
   });
 
   final bool isNarrow;
-  final bool isGenerating;
   final VoidCallback onGenerateTap;
 
   @override
@@ -1377,7 +1379,6 @@ class _PageHeader extends StatelessWidget {
       icon: Icons.description_rounded,
       label: isNarrow ? 'Generate' : 'Generate Report',
       isPrimary: true,
-      isLoading: isGenerating,
       onTap: onGenerateTap,
     );
 
@@ -1415,14 +1416,12 @@ class _HeaderButton extends StatelessWidget {
     required this.onTap,
     this.label,
     this.isPrimary = false,
-    this.isLoading = false,
   });
 
   final IconData icon;
   final String? label;
   final VoidCallback onTap;
   final bool isPrimary;
-  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -1441,7 +1440,7 @@ class _HeaderButton extends StatelessWidget {
     }
 
     return GestureDetector(
-      onTap: isLoading ? null : onTap,
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         decoration: isPrimary
@@ -1466,18 +1465,8 @@ class _HeaderButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (isLoading)
-              const SizedBox(
-                width: 15,
-                height: 15,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.primaryCyan,
-                ),
-              )
-            else
-              Icon(icon, color: fg, size: 16),
-            if (label != null && !isLoading) ...[
+            Icon(icon, color: fg, size: 16),
+            if (label != null) ...[
               const SizedBox(width: 6),
               Text(
                 label!,
