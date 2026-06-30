@@ -110,12 +110,28 @@ abstract final class AppRouter {
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final routeName = settings.name ?? '';
 
+    // ── Auth redirect (already logged in → away from login/register) ──────
+    if (routeName == AppRoutes.login || routeName == AppRoutes.register) {
+      final session = SessionService.instance.current;
+      if (session != null) {
+        final route = session.role == 'admin'
+            ? AppRoutes.adminDashboard
+            : AppRoutes.businessDashboard;
+        return _fade(
+          session.role == 'admin'
+              ? const AdminDashboardPage()
+              : const BusinessDashboardPage(),
+          RouteSettings(name: route),
+        );
+      }
+    }
+
     // ── Auth + offline guard ─────────────────────────────────────────────────
     final guardResult = _RoutePermissions.guard(routeName);
 
     if (guardResult == '__login__') {
       return _fade(
-        const LoginPage(),
+        const _AuthRedirectWidget(),
         const RouteSettings(name: AppRoutes.login),
       );
     }
@@ -194,7 +210,7 @@ abstract final class AppRouter {
         settings,
       ),
       AppRoutes.businessProfile => _fade(const BusinessProfilePage(), settings),
-      _ => _notFound(settings),
+      _ => _redirectToInitial(settings),
     };
   }
 
@@ -207,19 +223,8 @@ abstract final class AppRouter {
         transitionDuration: const Duration(milliseconds: 180),
       );
 
-  static Route<dynamic> _notFound(RouteSettings settings) => MaterialPageRoute(
-    settings: settings,
-    builder: (context) => _wrapError(
-      settings.name ?? '',
-      ErrorPage(
-        statusCode: 404,
-        onRetry: () => Navigator.pushReplacementNamed(
-          context,
-          AppRouter.initialRoute,
-        ),
-      ),
-    ),
-  );
+  static Route<dynamic> _redirectToInitial(RouteSettings settings) =>
+      _fade(const _RedirectToInitialWidget(), settings);
 
   /// Wraps an ErrorPage in the appropriate layout if the user is logged in.
   static Widget _wrapError(String routeName, Widget errorPage) {
@@ -245,4 +250,65 @@ abstract final class AppRouter {
       );
     }
   }
+}
+
+// ─── Auth Redirect Widget ────────────────────────────────────────────────────
+//
+// Used when an unauthenticated user tries to access a protected route.
+// Clears the entire navigation stack and replaces it with the login page,
+// so pressing back cannot return to the protected route.
+
+class _AuthRedirectWidget extends StatefulWidget {
+  const _AuthRedirectWidget();
+  @override
+  State<_AuthRedirectWidget> createState() => _AuthRedirectWidgetState();
+}
+
+class _AuthRedirectWidgetState extends State<_AuthRedirectWidget> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.login,
+          (route) => false,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+// ─── Redirect to Initial Widget ──────────────────────────────────────────────
+//
+// Used for unrecognized routes. Redirects to login (unauthenticated) or
+// the appropriate dashboard (authenticated) and clears the navigation stack.
+
+class _RedirectToInitialWidget extends StatefulWidget {
+  const _RedirectToInitialWidget();
+  @override
+  State<_RedirectToInitialWidget> createState() => _RedirectToInitialWidgetState();
+}
+
+class _RedirectToInitialWidgetState extends State<_RedirectToInitialWidget> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final session = SessionService.instance.current;
+      final route = session == null
+          ? AppRoutes.login
+          : session.role == 'admin'
+              ? AppRoutes.adminDashboard
+              : AppRoutes.businessDashboard;
+      Navigator.of(context).pushNamedAndRemoveUntil(route, (route) => false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
