@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:app/core/services/file_saver.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -43,14 +45,18 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
     _loadPdf();
   }
 
-  void _handleZoom(bool increase) {
+  void _setZoom(double scale) {
     setState(() {
-      if (increase) {
-        _zoomScale = (_zoomScale + 0.1).clamp(0.5, 2.0);
-      } else {
-        _zoomScale = (_zoomScale - 0.1).clamp(0.5, 2.0);
-      }
+      _zoomScale = scale.clamp(1.0, 2.0);
     });
+  }
+
+  void _handleZoom(bool increase) {
+    if (increase) {
+      _setZoom(_zoomScale + 0.1);
+    } else {
+      _setZoom(_zoomScale - 0.1);
+    }
   }
 
   void _resetZoom() {
@@ -205,7 +211,11 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
                         _loadPdf();
                       },
                     )
-                  : _PdfView(pdfBytes: _pdfBytes!, zoomScale: _zoomScale),
+                  : _PdfView(
+                      pdfBytes: _pdfBytes!,
+                      zoomScale: _zoomScale,
+                      onZoomChanged: _setZoom,
+                    ),
             ),
           ],
         ),
@@ -215,10 +225,16 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
 }
 
 class _PdfView extends StatefulWidget {
-  const _PdfView({super.key, required this.pdfBytes, required this.zoomScale});
+  const _PdfView({
+    super.key,
+    required this.pdfBytes,
+    required this.zoomScale,
+    this.onZoomChanged,
+  });
 
   final Uint8List pdfBytes;
   final double zoomScale;
+  final void Function(double)? onZoomChanged;
 
   @override
   State<_PdfView> createState() => _PdfViewState();
@@ -226,11 +242,35 @@ class _PdfView extends StatefulWidget {
 
 class _PdfViewState extends State<_PdfView> {
   final ScrollController _horizontalController = ScrollController();
+  double? _initialZoomScale;
 
   @override
   void dispose() {
     _horizontalController.dispose();
     super.dispose();
+  }
+
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent &&
+        HardwareKeyboard.instance.isControlPressed) {
+      final delta = event.scrollDelta.dy;
+      if (delta < 0) {
+        widget.onZoomChanged?.call(widget.zoomScale + 0.1);
+      } else if (delta > 0) {
+        widget.onZoomChanged?.call(widget.zoomScale - 0.1);
+      }
+    }
+  }
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _initialZoomScale = widget.zoomScale;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    if (details.pointerCount >= 2 && _initialZoomScale != null) {
+      final newScale = (_initialZoomScale! * details.scale).clamp(0.5, 2.0);
+      widget.onZoomChanged?.call(newScale);
+    }
   }
 
   @override
@@ -263,49 +303,56 @@ class _PdfViewState extends State<_PdfView> {
           interactive: true,
         ),
       ),
-      child: Container(
-        color: AppColors.backgroundDark,
-        child: Scrollbar(
-          controller: _horizontalController,
-          thumbVisibility: true,
-          trackVisibility: true,
-          notificationPredicate: (n) => n.metrics.axis == Axis.horizontal,
-          child: SingleChildScrollView(
+      child: Listener(
+        onPointerSignal: _handlePointerSignal,
+        child: Container(
+          color: AppColors.backgroundDark,
+          child: Scrollbar(
             controller: _horizontalController,
-            scrollDirection: Axis.horizontal,
-            child: Container(
-              width: targetWidth + 48,
-              alignment: Alignment.topCenter,
-              child: PdfPreview(
-                build: (format) => widget.pdfBytes,
-                useActions: false,
-                canChangePageFormat: false,
-                canChangeOrientation: false,
-                canDebug: false,
-                maxPageWidth: targetWidth,
-                loadingWidget: const _LoadingView(),
-                onError: (context, error) =>
-                    const _ErrorView(error: 'Could not render PDF.'),
-                scrollViewDecoration: const BoxDecoration(
-                  color: Colors.transparent,
-                ),
-                pdfPreviewPageDecoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(
-                    color: Colors.black.withOpacity(0.05),
-                    width: 0.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
+            thumbVisibility: true,
+            trackVisibility: true,
+            notificationPredicate: (n) => n.metrics.axis == Axis.horizontal,
+            child: SingleChildScrollView(
+              controller: _horizontalController,
+              scrollDirection: Axis.horizontal,
+              child: Container(
+                width: targetWidth + 48,
+                alignment: Alignment.topCenter,
+                child: GestureDetector(
+                  onScaleStart: _onScaleStart,
+                  onScaleUpdate: _onScaleUpdate,
+                  child: PdfPreview(
+                    build: (format) => widget.pdfBytes,
+                    useActions: false,
+                    canChangePageFormat: false,
+                    canChangeOrientation: false,
+                    canDebug: false,
+                    maxPageWidth: targetWidth,
+                    loadingWidget: const _LoadingView(),
+                    onError: (context, error) =>
+                        const _ErrorView(error: 'Could not render PDF.'),
+                    scrollViewDecoration: const BoxDecoration(
+                      color: Colors.transparent,
                     ),
-                  ],
-                ),
-                previewPageMargin: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 20,
+                    pdfPreviewPageDecoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(
+                        color: Colors.black.withOpacity(0.05),
+                        width: 0.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    previewPageMargin: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 20,
+                    ),
+                  ),
                 ),
               ),
             ),
