@@ -199,6 +199,8 @@ class SyncService {
   SyncState get currentState => _state;
 
   static const _syncDelay = Duration(milliseconds: 500);
+  static const _minRetryInterval = Duration(seconds: 30);
+  DateTime? _lastSyncEnd;
 
   void listenForConnectivity() {
     // 1. Listen for future changes
@@ -310,6 +312,13 @@ class SyncService {
       return;
     }
 
+    if (_lastSyncEnd != null &&
+        DateTime.now().difference(_lastSyncEnd!) < _minRetryInterval &&
+        _state.status == SyncStatus.error) {
+      debugPrint('⏳ sync: cooldown — skipping, last sync ended less than 30s ago');
+      return;
+    }
+
     // Claim the "syncing" lock synchronously, BEFORE the first `await` below.
     // This closes a race window: two near-simultaneous callers (connectivity
     // listener, the 5s polling timer, a manual "Sync Now" tap, or the
@@ -326,23 +335,33 @@ class SyncService {
     try {
       await _pullProfileAndBusiness();
       final createResult = await _pushPendingCreates(); // POST → /api/business/guest-entries
-      final updateResult = await _pushPendingUpdates(); // PUT  → /api/business/guest-records/:id
-      await _pullFromBackend();                         // GET  → /api/business/guest-records
-
-      final remaining = await _countPending();
-      final networkLost = createResult.networkLost || updateResult.networkLost;
-      final anyFailed = createResult.failed > 0 || updateResult.failed > 0;
-
-      if (networkLost) {
-        // Connection dropped mid-push. Not a real error — it's expected and
-        // self-healing, but the UI must NOT claim "synced" while records are
-        // still pending.
+      if (createResult.networkLost) {
+        final remaining = await _countPending();
         _emit(SyncState(
           status: SyncStatus.error,
           errorMessage: 'Connection lost during sync — will retry automatically',
           pendingCount: remaining,
         ));
-      } else if (anyFailed) {
+        return;
+      }
+
+      final updateResult = await _pushPendingUpdates(); // PUT  → /api/business/guest-records/:id
+      if (updateResult.networkLost) {
+        final remaining = await _countPending();
+        _emit(SyncState(
+          status: SyncStatus.error,
+          errorMessage: 'Connection lost during sync — will retry automatically',
+          pendingCount: remaining,
+        ));
+        return;
+      }
+
+      await _pullFromBackend();                         // GET  → /api/business/guest-records
+
+      final remaining = await _countPending();
+      final anyFailed = createResult.failed > 0 || updateResult.failed > 0;
+
+      if (anyFailed) {
         _emit(SyncState(
           status: SyncStatus.error,
           errorMessage: '$remaining record(s) failed to sync',
@@ -359,6 +378,8 @@ class SyncService {
           pendingCount: await _countPending(),
         ),
       );
+    } finally {
+      _lastSyncEnd = DateTime.now();
     }
   }
 
@@ -392,6 +413,13 @@ class SyncService {
 
     for (final record in records) {
       final recordId = record['id'] as String;
+
+      if (!await _canReachBackend()) {
+        debugPrint(
+          '🌐 _pushPendingCreates: connectivity lost — aborting batch',
+        );
+        return _PushResult(failed: failed, networkLost: true);
+      }
 
       try {
         final breakdowns = await db.query(
@@ -435,6 +463,27 @@ class SyncService {
           );
           await _tryRefreshToken();
           return _PushResult(failed: failed); // Stop batch — next sync will use the fresh token.
+        } else if (response.statusCode == 409) {
+          // The server already has a guest_records row with this id. Since
+          // the id is a UUID we generated on-device, this almost never means
+          // a genuine clash with someone else's data — it means our own
+          // earlier POST actually succeeded, but its 2xx response was lost
+          // (e.g. connectivity dropped right as the server committed, which
+          // is exactly what happens when the network is cut mid-sync). The
+          // record is already safely stored; treat this as synced instead of
+          // failing so it doesn't retry-and-409 forever.
+          await db.update(
+            LocalDatabase.tableGuestRecords,
+            {
+              'sync_status': LocalDatabase.syncSynced,
+              'local_updated_at': DateTime.now().toUtc().toIso8601String(),
+            },
+            where: 'id = ?',
+            whereArgs: [recordId],
+          );
+          debugPrint(
+            '♻️ _pushPendingCreates: $recordId already existed on server — marking synced',
+          );
         } else {
           failed++;
           debugPrint(
@@ -483,6 +532,13 @@ class SyncService {
 
     for (final record in records) {
       final recordId = record['id'] as String;
+
+      if (!await _canReachBackend()) {
+        debugPrint(
+          '🌐 _pushPendingUpdates: connectivity lost — aborting batch',
+        );
+        return _PushResult(failed: failed, networkLost: true);
+      }
 
       try {
         final breakdowns = await db.query(
