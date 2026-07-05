@@ -12,6 +12,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path/path.dart' as p;
 import 'package:app/ui/shared/pages/error_page.dart';
+import 'package:app/core/services/connectivity_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../shared/layouts/admin_layout.dart';
 import '../../../api/admin_dashboard_api.dart';
@@ -64,19 +65,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         year: _selectedYear,
       );
       if (mounted) setState(() => _dashData = data);
-    } on SocketException {
-      if (mounted) {
-        setState(() {
-          _dashError = 'no_internet';
-          _errorCode = 503;
-        });
-      }
-    } on TimeoutException {
-      if (mounted)
-        setState(() {
-          _dashError = 'timeout';
-          _errorCode = 408;
-        });
     } on ApiException catch (e) {
       if (mounted)
         setState(() {
@@ -84,10 +72,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           _errorCode = e.statusCode;
         });
     } catch (e) {
+      final code = await classifyError(e);
       if (mounted)
         setState(() {
           _dashError = e.toString();
-          _errorCode = 500;
+          _errorCode = code;
         });
     } finally {
       if (mounted) setState(() => _loadingDash = false);

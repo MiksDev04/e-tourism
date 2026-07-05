@@ -88,6 +88,18 @@ class ConnectivityService {
 //  isNetworkError
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Classifies a network/API error into the appropriate HTTP status code.
+///
+/// Uses a real device connectivity check ([ConnectivityService.isOnlineAsync])
+/// to distinguish actual offline (503) from server-unreachable (500) and
+/// timeout (408).
+Future<int> classifyError(dynamic error) async {
+  if (error is TimeoutException) return 408;
+  if (!isNetworkError(error)) return 500;
+  final online = await ConnectivityService.instance.isOnlineAsync;
+  return online ? 500 : 503;
+}
+
 bool isNetworkError(dynamic error) {
   if (error is SocketException) return true;
   if (error is TimeoutException) return true;

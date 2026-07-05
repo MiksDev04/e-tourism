@@ -1,10 +1,10 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:app/core/services/connectivity_service.dart';
 import 'package:app/ui/shared/pages/error_page.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/session_service.dart';
@@ -83,26 +83,13 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
         _phoneCtrl.text = profile.phone;
         _loadingProfile = false;
       });
-    } on SocketException {
-      if (!mounted) return;
-      setState(() {
-        _loadingProfile = false;
-        _fetchError = 'Network error.';
-        _errorCode = 503;
-      });
-    } on TimeoutException {
-      if (!mounted) return;
-      setState(() {
-        _loadingProfile = false;
-        _fetchError = 'Request timed out.';
-        _errorCode = 408;
-      });
     } catch (e) {
+      final code = await classifyError(e);
       if (!mounted) return;
       setState(() {
         _loadingProfile = false;
         _fetchError = e.toString();
-        _errorCode = 500;
+        _errorCode = code;
       });
     }
   }

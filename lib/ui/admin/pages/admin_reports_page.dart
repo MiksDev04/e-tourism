@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:app/core/services/connectivity_service.dart';
 import 'package:app/core/services/file_saver.dart';
 import 'package:app/ui/shared/pages/error_page.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -118,17 +119,12 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
         _fetchError = e.message;
         _errorCode = e.statusCode;
       });
-    } on SocketException {
-      if (!mounted) return;
-      setState(() {
-        _fetchError = 'no_internet';
-        _errorCode = 503;
-      });
     } catch (e) {
+      final code = await classifyError(e);
       if (!mounted) return;
       setState(() {
         _fetchError = e.toString();
-        _errorCode = 500;
+        _errorCode = code;
       });
     } finally {
       if (mounted) setState(() => _loadingReports = false);

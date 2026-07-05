@@ -1,9 +1,9 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:app/core/services/connectivity_service.dart';
 import 'package:app/ui/shared/pages/error_page.dart';
 import 'package:app/ui/shared/pages/loading_page.dart';
 import '../../../core/constants/app_colors.dart';
@@ -103,23 +103,12 @@ class _AdminMessagesPageState extends State<AdminMessagesPage> {
           _totalItems = result.totalCount;
         });
       }
-    } on SocketException {
-      if (mounted)
-        setState(() {
-          _fetchError = 'Network error.';
-          _errorCode = 503;
-        });
-    } on TimeoutException {
-      if (mounted)
-        setState(() {
-          _fetchError = 'Request timed out.';
-          _errorCode = 408;
-        });
     } catch (e) {
+      final code = await classifyError(e);
       if (mounted)
         setState(() {
           _fetchError = e.toString();
-          _errorCode = 500;
+          _errorCode = code;
         });
     } finally {
       if (mounted) setState(() => _loading = false);

@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:app/core/enums/business_enums.dart';
+import 'package:app/core/services/connectivity_service.dart';
 import 'package:app/ui/shared/pages/error_page.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/accommodation_export_service.dart';
@@ -128,15 +129,12 @@ class _AdminAccommodationsPageState extends State<AdminAccommodationsPage> {
         _isLoading = false;
       });
     } catch (e) {
+      final code = await classifyError(e);
       if (!mounted) return;
-      final isConnErr =
-          e.toString().toLowerCase().contains('socket') ||
-          e.toString().toLowerCase().contains('network') ||
-          e.toString().toLowerCase().contains('connection');
       setState(() {
         _isLoading = false;
         _error = e.toString();
-        _errorCode = isConnErr ? 503 : 500;
+        _errorCode = code;
       });
     }
   }

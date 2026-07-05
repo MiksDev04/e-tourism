@@ -1,8 +1,8 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:app/core/services/connectivity_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/session_service.dart';
 import '../../shared/layouts/admin_layout.dart';
@@ -110,27 +110,12 @@ class _AdminCompliancePageState extends State<AdminCompliancePage> {
           _isLoading = false;
         });
       }
-    } on SocketException catch (e) {
-      if (mounted) {
-        setState(() {
-          _fetchError = e.toString();
-          _errorCode = 503;
-          _isLoading = false;
-        });
-      }
-    } on TimeoutException catch (e) {
-      if (mounted) {
-        setState(() {
-          _fetchError = e.toString();
-          _errorCode = 408;
-          _isLoading = false;
-        });
-      }
     } catch (e) {
+      final code = await classifyError(e);
       if (mounted) {
         setState(() {
           _fetchError = e.toString();
-          _errorCode = 500;
+          _errorCode = code;
           _isLoading = false;
         });
       }
