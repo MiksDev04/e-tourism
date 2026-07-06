@@ -146,7 +146,7 @@ class _BusinessMessagesPageState extends State<BusinessMessagesPage> {
     });
 
     // ── Pre-check connectivity ─────────────────────────────────────────────
-    final online = await ConnectivityService.instance.isOnline;
+    final online = await ConnectivityService.instance.checkOnline;
     if (!mounted) return;
     if (!online) {
       setState(() {
@@ -179,20 +179,22 @@ class _BusinessMessagesPageState extends State<BusinessMessagesPage> {
         _Filter.announcement => 'announcement',
         _Filter.general      => 'general',
       };
-      final result = await _api.fetchInbox(
-        _businessId!,
-        page: _currentPage + 1,
-        pageSize: _pageSize,
-        type: type,
-      );
-      if (mounted) {
-        setState(() {
-          _messages   = result.data;
-          _totalPages = result.pageCount;
-          _totalItems = result.totalCount;
-          _isLoading  = false;
-        });
-      }
+       final result = await _api.fetchInbox(
+         _businessId!,
+         page: _currentPage + 1,
+         pageSize: _pageSize,
+         type: type,
+       );
+       final unreadCount = await _api.fetchUnreadCount(_businessId!);
+       if (mounted) {
+         setState(() {
+           _messages   = result.data;
+           _totalPages = result.pageCount;
+           _totalItems = result.totalCount;
+           _unreadCount = unreadCount;
+           _isLoading  = false;
+         });
+       }
     } catch (e) {
       if (!mounted) return;
       final code = await classifyError(e);
@@ -214,15 +216,18 @@ class _BusinessMessagesPageState extends State<BusinessMessagesPage> {
   bool _isRead(InboxMessage msg) =>
       msg.isRead || _locallyRead.contains(msg.recipientId);
 
-  int get _unreadCount => _totalItems;
+  int _unreadCount = 0;
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
-  Future<void> _openMessage(InboxMessage msg) async {
-    if (!_isRead(msg)) {
-      setState(() => _locallyRead.add(msg.recipientId));
-      _api.markAsRead(msg.recipientId).catchError((_) {});
-    }
+   Future<void> _openMessage(InboxMessage msg) async {
+     if (!_isRead(msg)) {
+       setState(() {
+         _locallyRead.add(msg.recipientId);
+         if (_unreadCount > 0) _unreadCount--;
+       });
+       _api.markAsRead(msg.recipientId).catchError((_) {});
+     }
 
     if (!mounted) return;
     showMessageViewDialog(context, msg);

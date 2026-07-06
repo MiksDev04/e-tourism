@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:app/core/services/file_saver.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/connectivity_service.dart';
@@ -35,6 +37,7 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
 
   bool _exportingExcel = false;
   bool _exportingPdf = false;
+  bool _printing = false;
   double _zoomScale = 1.0;
 
   final _reportService = ReportService();
@@ -127,15 +130,71 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
   }
 
   Future<void> _printPdf() async {
-    if (_pdfBytes == null) return;
+    if (_pdfBytes == null || _printing) return;
+    setState(() => _printing = true);
     try {
       await Printing.layoutPdf(
-        onLayout: (format) async => _pdfBytes!,
+        // `format` is the page size/printable area of whatever printer and
+        // paper the user picks in the OS print dialog. The report PDF is
+        // pre-rendered at a fixed size (A4 from the backend), so instead of
+        // returning it as-is (which prints cropped/offset on any printer
+        // using a different paper size or driver margins), we rebuild it
+        // scaled to fit that printable area — Windows' native print dialog
+        // has no "Fit to page" option of its own, so this has to happen
+        // here in the app.
+        onLayout: (format) => _fitToPage(_pdfBytes!, format),
         name: 'Report_${widget.report.shortId}',
       );
     } catch (e) {
       _showModalSnack('Error printing PDF: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _printing = false);
     }
+  }
+
+  /// Rasters each page of [source] and re-lays it out onto a fresh PDF whose
+  /// pages match [format] (the printer/paper actually selected by the user),
+  /// scaling each page's content to fit entirely within the printable area
+  /// while preserving its aspect ratio — equivalent to "Fit to printable
+  /// area" in browsers/Adobe Reader, which the raw Windows print dialog
+  /// doesn't provide.
+  Future<Uint8List> _fitToPage(Uint8List source, PdfPageFormat format) async {
+    final fitted = pw.Document();
+
+    // 200 dpi is a good balance between print sharpness (tables/small text
+    // in DAE-1B/DAE-2 style reports stay legible) and raster/print time.
+    // Bump this if a printer's output looks soft; drop it if printing feels
+    // slow on large multi-page reports.
+    const rasterDpi = 200.0;
+
+    await for (final page in Printing.raster(source, dpi: rasterDpi)) {
+      final png = await page.toPng();
+      final image = pw.MemoryImage(png);
+
+      fitted.addPage(
+        pw.Page(
+          pageFormat: format,
+          // No explicit margin override: `format` already carries the
+          // printer/driver's own margins, so the default page margin is the
+          // true printable area. FittedBox then scales the rastered page to
+          // sit fully inside it without clipping or distorting proportions.
+          build: (context) => pw.Align(
+            alignment: pw.Alignment.topCenter,
+            child: pw.FittedBox(
+              fit: pw.BoxFit.contain,
+              alignment: pw.Alignment.topCenter,
+              child: pw.SizedBox(
+                width: page.width.toDouble(),
+                height: page.height.toDouble(),
+                child: pw.Image(image),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return fitted.save();
   }
 
   void _showModalSnack(String msg, {bool isError = false}) {
@@ -190,7 +249,8 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
                   ? null
                   : _exportPdf,
               exportingPdf: _exportingPdf,
-              onPrint: (_pdfBytes == null) ? null : _printPdf,
+              onPrint: (_pdfBytes == null || _printing) ? null : _printPdf,
+              printing: _printing,
               zoomScale: _zoomScale,
               onZoomIn: () => _handleZoom(true),
               onZoomOut: () => _handleZoom(false),
@@ -374,6 +434,7 @@ class _ModalHeader extends StatelessWidget {
     required this.onExportPdf,
     required this.exportingPdf,
     required this.onPrint,
+    required this.printing,
     required this.zoomScale,
     required this.onZoomIn,
     required this.onZoomOut,
@@ -387,6 +448,7 @@ class _ModalHeader extends StatelessWidget {
   final VoidCallback? onExportPdf;
   final bool exportingPdf;
   final VoidCallback? onPrint;
+  final bool printing;
   final double zoomScale;
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
@@ -558,6 +620,7 @@ class _ModalHeader extends StatelessWidget {
                           label: 'Print',
                           color: AppColors.primaryCyan,
                           borderColor: AppColors.primaryCyan,
+                          isLoading: printing,
                           onTap: onPrint,
                         ),
                       ],
@@ -612,6 +675,7 @@ class _ModalHeader extends StatelessWidget {
                     label: 'Print',
                     color: AppColors.primaryCyan,
                     borderColor: AppColors.primaryCyan,
+                    isLoading: printing,
                     onTap: onPrint,
                   ),
                 ],
