@@ -568,6 +568,8 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return BusinessLayout(
       title: 'Guest Entry',
       selectedIndex: 1,
@@ -581,7 +583,9 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
           // ── Main scrollable content ──────────────────────────────────────
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: isMobile
+                  ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+                  : const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/services/offline_service.dart';
 import '../../shared/layouts/business_layout.dart';
 import '../../shared/widgets/paginator.dart';
+import '../../shared/widgets/action_icon_button.dart';
 import '../widgets/edit_guest_dialog.dart';
 import '../../../api/business_guest_record_api.dart';
 
@@ -392,8 +393,7 @@ class _BusinessGuestRecordsPageState extends State<BusinessGuestRecordsPage> {
                         isNarrow: isNarrow,
                         totalRecords: _totalItems,
                       ),
-                      const SizedBox(height: 16),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 8),
                       if (_showFilters) ...[
                         _FiltersSection(
                           checkInFrom:       _checkInFrom,
@@ -1212,7 +1212,7 @@ class _TableHeader extends StatelessWidget {
           Expanded(flex: 2, child: _HeaderCell('Purpose')),
           Expanded(flex: 2, child: _HeaderCell('Transport')),
           Expanded(flex: 2, child: _HeaderCell('Status')),
-          Expanded(flex: 2, child: _HeaderCell('Actions')),
+          Expanded(flex: 3, child: _HeaderCell('Actions')),
         ],
       ),
     );
@@ -1319,7 +1319,7 @@ class _RecordRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            flex: 2,
+            flex: 3,
             child: _ActionButtons(
               status: r.status,
               onEdit: () => onEdit(r),
@@ -1390,16 +1390,20 @@ class _RecordCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              _IconBtn(
+              ActionIconButton(
                 icon: Icons.visibility_outlined,
-                tooltip: 'View Record',
+                label: 'View',
+                color: AppColors.accentGreen,
+                showBorder: true,
                 onTap: () => _showRecordModal(context, r),
               ),
               if (r.status == GuestRecordStatus.active) ...[
                 const SizedBox(width: 8),
-                _IconBtn(
+                ActionIconButton(
                   icon: Icons.edit_outlined,
-                  tooltip: 'Edit',
+                  label: 'Edit',
+                  color: AppColors.primaryCyan,
+                  showBorder: true,
                   onTap: () => onEdit(r),
                 ),
               ],
@@ -1480,34 +1484,27 @@ class _ActionButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
       children: [
-        _IconBtn(
+        ActionIconButton(
           icon: Icons.visibility_outlined,
-          tooltip: 'View Record',
+          label: 'View',
+          color: AppColors.accentGreen,
+          showBorder: true,
           onTap: onView,
         ),
-        const SizedBox(width: 8),
         if (status == GuestRecordStatus.active)
-          _IconBtn(icon: Icons.edit_outlined, tooltip: 'Edit', onTap: onEdit),
+          ActionIconButton(
+            icon: Icons.edit_outlined,
+            label: 'Edit',
+            color: AppColors.primaryCyan,
+            showBorder: true,
+            onTap: onEdit,
+          ),
       ],
     );
-  }
-}
-
-class _IconBtn extends StatelessWidget {
-  const _IconBtn({required this.icon, required this.onTap, this.tooltip});
-  final IconData icon;
-  final VoidCallback onTap;
-  final String? tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    final btn = GestureDetector(
-      onTap: onTap,
-      child: Icon(icon, color: AppColors.textGray, size: 17),
-    );
-    return tooltip != null ? Tooltip(message: tooltip!, child: btn) : btn;
   }
 }
 

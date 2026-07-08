@@ -77,7 +77,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
         .toSet()
         .toList();
     names.sort();
-    return ['All', 'Total', ...names];
+    return ['All Businesses', 'Total', ...names];
   }
 
   @override
@@ -669,14 +669,21 @@ class _TableRow extends StatelessWidget {
 
 // ─── View Button ──────────────────────────────────────────────────────────────
 
-class _ViewButton extends StatelessWidget {
+class _ViewButton extends StatefulWidget {
   const _ViewButton({required this.hasFile, required this.onTap});
   final bool hasFile;
   final VoidCallback onTap;
 
   @override
+  State<_ViewButton> createState() => _ViewButtonState();
+}
+
+class _ViewButtonState extends State<_ViewButton> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    if (!hasFile) {
+    if (!widget.hasFile) {
       return const Tooltip(
         message: 'File unavailable',
         child: Icon(
@@ -686,35 +693,48 @@ class _ViewButton extends StatelessWidget {
         ),
       );
     }
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: AppColors.primaryCyan.withOpacity(0.10),
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(color: AppColors.primaryCyan.withOpacity(0.3)),
-        ),
-        child: const FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.open_in_full_rounded,
-                color: AppColors.primaryCyan,
-                size: 13,
+    final color = AppColors.primaryCyan;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: Tooltip(
+        message: 'View Report',
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: _hovered
+                  ? color.withOpacity(0.12)
+                  : color.withOpacity(0.04),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: _hovered
+                    ? color.withOpacity(0.7)
+                    : color.withOpacity(0.35),
               ),
-              SizedBox(width: 5),
-              Text(
-                'View',
-                style: TextStyle(
-                  color: AppColors.primaryCyan,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.open_in_full_rounded,
+                  color: _hovered ? color : color.withOpacity(0.7),
+                  size: 13,
                 ),
-              ),
-            ],
+                const SizedBox(width: 5),
+                Text(
+                  'View',
+                  style: TextStyle(
+                    color: _hovered ? color : color.withOpacity(0.7),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1203,126 +1223,86 @@ class _FilterSection extends StatelessWidget {
     final monthValue = selectedMonth.isEmpty ? 'All Months' : selectedMonth;
     final yearValue = selectedYear.isEmpty ? 'All Years' : selectedYear;
     final nameValue =
-        selectedBusinessName.isEmpty ? 'All' : selectedBusinessName;
+        selectedBusinessName.isEmpty ? 'All Businesses' : selectedBusinessName;
 
     if (isNarrow) {
-      return SizedBox(
-        width: double.infinity,
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.cardBackground,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.cardBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _FilterDropdown(
-                      label: 'Month',
-                      value: monthValue,
-                      items: months,
-                      onChanged: onMonthChanged,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: _FilterDropdown(
-                      label: 'Year',
-                      value: yearValue,
-                      items: years,
-                      onChanged: onYearChanged,
-                    ),
-                  ),
-                ],
+              Expanded(
+                child: _FilterDropdown(
+                  value: monthValue,
+                  items: months,
+                  onChanged: onMonthChanged,
+                ),
               ),
-              const SizedBox(height: 14),
-              _FilterDropdown(
-                label: 'Business',
-                value: nameValue,
-                items: businessNameOptions,
-                onChanged: onBusinessNameChanged,
+              const SizedBox(width: 10),
+              Expanded(
+                child: _FilterDropdown(
+                  value: yearValue,
+                  items: years,
+                  onChanged: onYearChanged,
+                ),
               ),
             ],
           ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 3,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
-        mainAxisExtent: 58,
-        children: [
+          const SizedBox(height: 10),
           _FilterDropdown(
-            label: 'Month',
-            value: monthValue,
-            items: months,
-            onChanged: onMonthChanged,
-          ),
-          _FilterDropdown(
-            label: 'Year',
-            value: yearValue,
-            items: years,
-            onChanged: onYearChanged,
-          ),
-          _FilterDropdown(
-            label: 'Business',
             value: nameValue,
             items: businessNameOptions,
             onChanged: onBusinessNameChanged,
           ),
         ],
-      ),
-    );
+      );
+    }
+
+    return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        mainAxisExtent: 38,
+        children: [
+          _FilterDropdown(
+            value: monthValue,
+            items: months,
+            onChanged: onMonthChanged,
+          ),
+          _FilterDropdown(
+            value: yearValue,
+            items: years,
+            onChanged: onYearChanged,
+          ),
+          _FilterDropdown(
+            value: nameValue,
+            items: businessNameOptions,
+            onChanged: onBusinessNameChanged,
+          ),
+        ],
+      );
   }
 }
 
 class _FilterDropdown extends StatelessWidget {
   const _FilterDropdown({
-    required this.label,
     required this.value,
     required this.items,
     required this.onChanged,
   });
 
-  final String label;
   final String value;
   final List<String> items;
   final void Function(String?) onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.textGray,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: AppColors.backgroundDark,
+            color: AppColors.cardBackground,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AppColors.cardBorder),
           ),
@@ -1331,39 +1311,26 @@ class _FilterDropdown extends StatelessWidget {
               value: value,
               isExpanded: true,
               isDense: true,
-              icon: const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: AppColors.textGray,
-                size: 20,
-              ),
-              style: const TextStyle(color: AppColors.textWhite, fontSize: 13),
+              iconEnabledColor: AppColors.textGray,
+              style: const TextStyle(color: AppColors.textGray, fontSize: 13),
               dropdownColor: AppColors.cardBackground,
               items: items
-                  .map(
-                    (item) => DropdownMenuItem(
-                      value: item,
-                      child: Text(
-                        item,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textWhite,
-                          fontSize: 13,
+                  .map((item) => DropdownMenuItem(
+                        value: item,
+                        child: Text(
+                          item,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ),
-                  )
+                      ))
                   .toList(),
               onChanged: onChanged,
             ),
           ),
-        ),
-      ],
     );
   }
 }
 
 // ─── Page Header ──────────────────────────────────────────────────────────────
-
 class _PageHeader extends StatelessWidget {
   const _PageHeader({
     required this.isNarrow,
@@ -1442,20 +1409,14 @@ class _HeaderButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: isPrimary
             ? BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [AppColors.gradientStart, AppColors.gradientEnd],
                 ),
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primaryBlue.withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
               )
             : BoxDecoration(
                 color: bg,
@@ -1465,15 +1426,15 @@ class _HeaderButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: fg, size: 16),
+            Icon(icon, color: fg, size: isPrimary ? 14 : 16),
             if (label != null) ...[
-              const SizedBox(width: 6),
+              SizedBox(width: isPrimary ? 4 : 6),
               Text(
                 label!,
                 style: TextStyle(
                   color: fg,
-                  fontSize: 13,
-                  fontWeight: isPrimary ? FontWeight.w600 : FontWeight.normal,
+                  fontSize: isPrimary ? 12 : 13,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],

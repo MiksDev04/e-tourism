@@ -9,6 +9,7 @@ import '../../shared/layouts/admin_layout.dart';
 import '../../shared/pages/error_page.dart';
 import '../../../api/admin_compliance_api.dart';
 import '../../../api/messages_api.dart';
+import '../../shared/widgets/action_icon_button.dart';
 import '../../shared/widgets/paginator.dart';
 import '../widgets/business_tourist_stats_modal.dart';
 
@@ -901,36 +902,6 @@ class _ComplianceRow extends StatelessWidget {
     return years == 1 ? '1 year ago' : '$years years ago';
   }
 
-  Widget _buildManageButton() {
-    return OutlinedButton.icon(
-      onPressed: () => onAction(record),
-      icon: const Icon(Icons.manage_accounts_rounded, size: 14),
-      label: const Text('Manage', style: TextStyle(fontSize: 12)),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.primaryCyan,
-        side: BorderSide(color: AppColors.primaryCyan.withOpacity(0.4)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-    );
-  }
-
-  Widget _buildViewStatsButton() {
-    return OutlinedButton.icon(
-      onPressed: () => onViewStats(record),
-      icon: const Icon(Icons.bar_chart_rounded, size: 14),
-      label: const Text('View', style: TextStyle(fontSize: 12)),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.accentGreen,
-        side: BorderSide(color: AppColors.accentGreen.withOpacity(0.4)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -1063,9 +1034,21 @@ class _ComplianceRow extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    _buildManageButton(),
+                    ActionIconButton(
+                      icon: Icons.manage_accounts_rounded,
+                      label: 'Manage',
+                      color: AppColors.primaryCyan,
+                      showBorder: true,
+                      onTap: () => onAction(record),
+                    ),
                     const SizedBox(height: 8),
-                    _buildViewStatsButton(),
+                    ActionIconButton(
+                      icon: Icons.bar_chart_rounded,
+                      label: 'View',
+                      color: AppColors.accentGreen,
+                      showBorder: true,
+                      onTap: () => onViewStats(record),
+                    ),
                   ],
                 ),
               ],
@@ -1131,8 +1114,20 @@ class _ComplianceRow extends StatelessWidget {
                     spacing: 6,
                     runSpacing: 6,
                     children: [
-                      _buildManageButton(),
-                      _buildViewStatsButton(),
+                      ActionIconButton(
+                        icon: Icons.manage_accounts_rounded,
+                        label: 'Manage',
+                        color: AppColors.primaryCyan,
+                        showBorder: true,
+                        onTap: () => onAction(record),
+                      ),
+                      ActionIconButton(
+                        icon: Icons.bar_chart_rounded,
+                        label: 'View',
+                        color: AppColors.accentGreen,
+                        showBorder: true,
+                        onTap: () => onViewStats(record),
+                      ),
                     ],
                   ),
                 ),

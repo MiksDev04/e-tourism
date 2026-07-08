@@ -71,7 +71,15 @@ class AccommodationRankingRow {
 
 class AdminAccommodationApi extends BaseApi {
   // ── Fetch paginated businesses with joined profile ──────────────────────
-  Future<({List<Accommodation> data, int totalCount, int pageCount})> fetchAll({
+  Future<({
+    List<Accommodation> data,
+    int totalCount,
+    int pageCount,
+    int? approvedCount,
+    int? pendingCount,
+    int? rejectedCount,
+    int? warningCount,
+  })> fetchAll({
     int page = 1,
     int pageSize = 10,
     String? status,
@@ -91,13 +99,39 @@ class AdminAccommodationApi extends BaseApi {
       final list = body['data'] as List;
       final totalCount = (body['totalCount'] as num?)?.toInt() ?? 0;
       final pageCount = (body['pageCount'] as num?)?.toInt() ?? 0;
+      final approvedCount = (body['approvedCount'] as num?)?.toInt();
+      final pendingCount = (body['pendingCount'] as num?)?.toInt();
+      final rejectedCount = (body['rejectedCount'] as num?)?.toInt();
+      final warningCount = (body['warningCount'] as num?)?.toInt();
       final data = list
           .map((e) => Accommodation.fromMap(e as Map<String, dynamic>))
           .toList();
-      return (data: data, totalCount: totalCount, pageCount: pageCount);
+      return (
+        data: data,
+        totalCount: totalCount,
+        pageCount: pageCount,
+        approvedCount: approvedCount,
+        pendingCount: pendingCount,
+        rejectedCount: rejectedCount,
+        warningCount: warningCount,
+      );
     } catch (e) {
       debugPrint('❌ fetchAll error: $e');
       rethrow;
+    }
+  }
+
+  // ── Fetch total count for a single status ──────────────────────────────
+  Future<int> fetchStatusCount(String status) async {
+    try {
+      final response = await get(
+        '/api/admin/accommodations?page=1&pageSize=1&status=$status',
+      );
+      final body = handleResponse(response);
+      return (body['totalCount'] as num?)?.toInt() ?? 0;
+    } catch (e) {
+      debugPrint('❌ fetchStatusCount error: $e');
+      return 0;
     }
   }
 

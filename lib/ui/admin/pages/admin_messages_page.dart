@@ -10,6 +10,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../api/messages_api.dart';
 import '../../../core/services/session_service.dart';
 import '../../shared/layouts/admin_layout.dart';
+import '../../shared/widgets/action_icon_button.dart';
 import '../../shared/widgets/paginator.dart';
 import '../widgets/compose_message_modal.dart';
 import '../widgets/message_view_dialog.dart';
@@ -498,40 +499,53 @@ class _MessagesTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Column(
-        children: [
-          const _TableHeader(),
-          const Divider(color: AppColors.cardBorder, height: 1),
-          rows.isEmpty
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text(
-                      'No messages found.',
-                      style: TextStyle(color: AppColors.textGray),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMedium = constraints.maxWidth < 900;
+
+        final table = Column(
+          children: [
+            const _TableHeader(),
+            const Divider(color: AppColors.cardBorder, height: 1),
+            rows.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Text(
+                        'No messages found.',
+                        style: TextStyle(color: AppColors.textGray),
+                      ),
+                    ),
+                  )
+                : LayoutBuilder(
+                  builder: (_, lc) => ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: rows.length,
+                    separatorBuilder: (_, __) => lc.maxWidth < 900
+                        ? const SizedBox(height: 10)
+                        : const Divider(color: AppColors.cardBorder, height: 1),
+                    itemBuilder: (_, i) => _MessageRow(
+                      message: rows[i],
+                      api: api,
+                      onRefresh: onRefresh,
                     ),
                   ),
-                )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: rows.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(color: AppColors.cardBorder, height: 1),
-                  itemBuilder: (_, i) => _MessageRow(
-                    message: rows[i],
-                    api: api,
-                    onRefresh: onRefresh,
-                  ),
                 ),
-        ],
-      ),
+          ],
+        );
+
+        if (isMedium) return table;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.cardBorder),
+          ),
+          child: table,
+        );
+      },
     );
   }
 }
@@ -655,221 +669,118 @@ class _MessageRow extends StatelessWidget {
       builder: (context, constraints) {
         final isMedium = constraints.maxWidth < 900;
 
+        if (isMedium) {
+          return Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.cardBackground,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.cardBorder),
+            ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      _TypeBadge(type: message.messageType),
+                      const Spacer(),
+                      ActionIconButton(
+                        icon: Icons.remove_red_eye_outlined,
+                        label: 'View',
+                        color: AppColors.primaryCyan,
+                        showBorder: true,
+                        onTap: () => _openMessage(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _CardDetail(
+                    label: 'Subject',
+                    child: Text(
+                      message.subject,
+                      style: const TextStyle(
+                        color: AppColors.textWhite,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  _CardDetail(
+                    label: 'Scope',
+                    child: _ScopeBadge(isBroadcast: message.isBroadcast),
+                  ),
+                  const SizedBox(height: 6),
+                  _CardDetail(
+                    label: 'Sent',
+                    child: Text(
+                      dateStr,
+                      style: const TextStyle(
+                        color: AppColors.textGray,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+        }
+
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          child: isMedium
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Subject',
-                                  style: TextStyle(
-                                    color: AppColors.textGray,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  message.subject,
-                                  style: const TextStyle(
-                                    color: AppColors.textWhite,
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => _openMessage(context),
-                          child: const Padding(
-                            padding: EdgeInsets.only(left: 8),
-                            child: Icon(
-                              Icons.visibility_outlined,
-                              color: AppColors.textGray,
-                              size: 18,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    LayoutBuilder(
-                      builder: (ctx, bc) {
-                        final total = bc.maxWidth;
-                        final desired =
-                            (total - 24) /
-                            3; // prefer three columns with spacing
-                        final columnWidth = desired < 140
-                            ? (total - 12) / 2
-                            : desired; // switch to two columns if narrow
-                        return Wrap(
-                          spacing: 12,
-                          runSpacing: 8,
-                          children: [
-                            SizedBox(
-                              width: columnWidth,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Type',
-                                    style: TextStyle(
-                                      color: AppColors.textGray,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  LayoutBuilder(
-                                    builder: (ctx2, bc2) => ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        maxWidth: bc2.maxWidth,
-                                      ),
-                                      child: FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        alignment: Alignment.centerLeft,
-                                        child: _TypeBadge(
-                                          type: message.messageType,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(
-                              width: columnWidth,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Scope',
-                                    style: TextStyle(
-                                      color: AppColors.textGray,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  LayoutBuilder(
-                                    builder: (ctx2, bc2) => ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        maxWidth: bc2.maxWidth,
-                                      ),
-                                      child: FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        alignment: Alignment.centerLeft,
-                                        child: _ScopeBadge(
-                                          isBroadcast: message.isBroadcast,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(
-                              width: columnWidth,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Sent',
-                                    style: TextStyle(
-                                      color: AppColors.textGray,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    dateStr,
-                                    style: const TextStyle(
-                                      color: AppColors.textGray,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: _TypeBadge(type: message.messageType),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 5,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Text(
-                          message.subject,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.textWhite,
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: _ScopeBadge(isBroadcast: message.isBroadcast),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Text(
-                          dateStr,
-                          style: const TextStyle(
-                            color: AppColors.textGray,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 1,
-                      child: Align(
-                        alignment: Alignment.center,
-                        child: GestureDetector(
-                          onTap: () => _openMessage(context),
-                          child: const Icon(
-                            Icons.visibility_outlined,
-                            color: AppColors.textGray,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _TypeBadge(type: message.messageType),
                 ),
+              ),
+              Expanded(
+                flex: 5,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    message.subject,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textWhite,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _ScopeBadge(isBroadcast: message.isBroadcast),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    dateStr,
+                    style: const TextStyle(
+                      color: AppColors.textGray,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ActionIconButton(
+                icon: Icons.remove_red_eye_outlined,
+                label: 'View',
+                color: AppColors.primaryCyan,
+                showBorder: true,
+                onTap: () => _openMessage(context),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -958,6 +869,38 @@ class _ScopeBadge extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─── Card Detail ──────────────────────────────────────────────────────────────
+
+class _CardDetail extends StatelessWidget {
+  const _CardDetail({required this.label, required this.child});
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textSubtle,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        Flexible(
+          fit: FlexFit.loose,
+          child: child,
+        ),
+      ],
     );
   }
 }

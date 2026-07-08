@@ -229,63 +229,68 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
       onNavSelected: (_) {},
       child: _fetchError != null
           ? ErrorPage(statusCode: _errorCode ?? 500, onRetry: _loadProfile)
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _PageHeader(),
-                  const SizedBox(height: 20),
-                  if (_loadingProfile)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 48),
-                        child: CircularProgressIndicator(
-                          color: AppColors.primaryCyan,
-                          strokeWidth: 2,
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final n = constraints.maxWidth < 600;
+                return SingleChildScrollView(
+                  padding: EdgeInsets.all(n ? 12 : 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _PageHeader(),
+                      SizedBox(height: n ? 12 : 20),
+                      if (_loadingProfile)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 48),
+                            child: CircularProgressIndicator(
+                              color: AppColors.primaryCyan,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        )
+                      else
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 530),
+                          child: Column(
+                            children: [
+                              _ProfileCard(profile: _profile),
+                              SizedBox(height: n ? 10 : 16),
+                              _AccountInfoCard(
+                                fullNameCtrl: _fullNameCtrl,
+                                usernameCtrl: _usernameCtrl,
+                                phoneCtrl: _phoneCtrl,
+                                loading: _savingInfo,
+                                onSave: _saveAccountInfo,
+                                phoneError: _phoneError,
+                              ),
+                              SizedBox(height: n ? 10 : 16),
+                              _SecureActionCard(
+                                icon: Icons.email_outlined,
+                                title: 'Email Address',
+                                subtitle: _profile?.email ?? '—',
+                                subtitleIsEmail: true,
+                                buttonIcon: Icons.edit_outlined,
+                                buttonLabel: 'Change Email',
+                                onPressed: _startChangeEmailFlow,
+                              ),
+                              SizedBox(height: n ? 10 : 16),
+                              _SecureActionCard(
+                                icon: Icons.lock_outline_rounded,
+                                title: 'Password',
+                                subtitle:
+                                    'Update your account password securely via email OTP',
+                                buttonIcon: Icons.lock_reset_rounded,
+                                buttonLabel: 'Change Password',
+                                onPressed: _startChangePasswordFlow,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    )
-                  else
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 530),
-                      child: Column(
-                        children: [
-                          _ProfileCard(profile: _profile),
-                          const SizedBox(height: 16),
-                          _AccountInfoCard(
-                            fullNameCtrl: _fullNameCtrl,
-                            usernameCtrl: _usernameCtrl,
-                            phoneCtrl: _phoneCtrl,
-                            loading: _savingInfo,
-                            onSave: _saveAccountInfo,
-                            phoneError: _phoneError,
-                          ),
-                          const SizedBox(height: 16),
-                          _SecureActionCard(
-                            icon: Icons.email_outlined,
-                            title: 'Email Address',
-                            subtitle: _profile?.email ?? '—',
-                            subtitleIsEmail: true,
-                            buttonIcon: Icons.edit_outlined,
-                            buttonLabel: 'Change Email',
-                            onPressed: _startChangeEmailFlow,
-                          ),
-                          const SizedBox(height: 16),
-                          _SecureActionCard(
-                            icon: Icons.lock_outline_rounded,
-                            title: 'Password',
-                            subtitle:
-                                'Update your account password securely via email OTP',
-                            buttonIcon: Icons.lock_reset_rounded,
-                            buttonLabel: 'Change Password',
-                            onPressed: _startChangePasswordFlow,
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
+                    ],
+                  ),
+                );
+              },
             ),
     );
   }
@@ -1452,7 +1457,7 @@ class _GradientButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = enabled && !loading;
     return SizedBox(
-      height: 42,
+      height: 36,
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: active
@@ -1461,7 +1466,7 @@ class _GradientButton extends StatelessWidget {
                 )
               : null,
           color: active ? null : AppColors.inputBackground,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(8),
           boxShadow: active
               ? [
                   BoxShadow(
@@ -1479,13 +1484,13 @@ class _GradientButton extends StatelessWidget {
             shadowColor: Colors.transparent,
             disabledBackgroundColor: Colors.transparent,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: BorderRadius.circular(8),
             ),
           ),
           child: loading
               ? const SizedBox(
-                  width: 18,
-                  height: 18,
+                  width: 16,
+                  height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
                     color: AppColors.primaryCyan,
@@ -1494,13 +1499,13 @@ class _GradientButton extends StatelessWidget {
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, size: 16, color: Colors.white),
-                    const SizedBox(width: 8),
+                    Icon(icon, size: 14, color: Colors.white),
+                    const SizedBox(width: 6),
                     Text(
                       label,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 13.5,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1736,15 +1741,20 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: child,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final n = constraints.maxWidth < 600;
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(n ? 14 : 22),
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.cardBorder),
+          ),
+          child: child,
+        );
+      },
     );
   }
 }

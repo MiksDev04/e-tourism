@@ -804,14 +804,16 @@ class _BusinessDashboardPageState extends State<BusinessDashboardPage> {
             child: Stack(
               children: [
                 SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final isNarrow = constraints.maxWidth < 980;
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+                      final isMobile = MediaQuery.of(context).size.width < 600;
+                      return Padding(
+                        padding: EdgeInsets.all(isMobile ? 16 : 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                           if (isNarrow) ...[
                             _HotelHeader(
                               name:          _businessName,
@@ -873,6 +875,7 @@ class _BusinessDashboardPageState extends State<BusinessDashboardPage> {
                             _StatCards(
                               stats:         _dashData!.stats,
                               selectedMonth: _selectedMonth,
+                              selectedYear:  _selectedYear,
                             ),
                             const SizedBox(height: 20),
                             _DonutChartsRow(
@@ -900,7 +903,8 @@ class _BusinessDashboardPageState extends State<BusinessDashboardPage> {
                           ),
                           const SizedBox(height: 32),
                         ],
-                      );
+                      ),
+                    );
                     },
                   ),
                 ),
@@ -1160,13 +1164,14 @@ class _FilterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     return Wrap(
-      spacing: 10,
-      runSpacing: 10,
+      spacing: isNarrow ? 6 : 10,
+      runSpacing: isNarrow ? 6 : 10,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         SizedBox(
-          width: 170,
+          width: isNarrow ? 140 : 170,
           child: _FilterDropdown<int>(
             value: selectedMonth,
             items: _months.map((m) => (m.$1, m.$2)).toList(),
@@ -1175,7 +1180,7 @@ class _FilterRow extends StatelessWidget {
           ),
         ),
         SizedBox(
-          width: 110,
+          width: isNarrow ? 90 : 110,
           child: _FilterDropdown<int>(
             value: selectedYear,
             items: _years.map((y) => (y, '$y')).toList(),
@@ -1205,8 +1210,8 @@ class _FilterDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(8),
@@ -1214,7 +1219,7 @@ class _FilterDropdown<T> extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: AppColors.primaryCyan),
+          Icon(icon, size: 12, color: AppColors.primaryCyan),
           const SizedBox(width: 6),
           Expanded(
             child: DropdownButtonHideUnderline(
@@ -1229,7 +1234,7 @@ class _FilterDropdown<T> extends StatelessWidget {
                 ),
                 style: const TextStyle(
                   color: AppColors.textWhite,
-                  fontSize: 13,
+                  fontSize: 12,
                 ),
                 onChanged: (v) {
                   if (v != null) onChanged(v);
@@ -1262,8 +1267,8 @@ class _ExportButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [AppColors.gradientStart, AppColors.gradientEnd],
@@ -1283,13 +1288,13 @@ class _ExportButton extends StatelessWidget {
                 ),
               )
             else
-              const Icon(Icons.upload_rounded, size: 16, color: Colors.white),
-            const SizedBox(width: 6),
+              const Icon(Icons.upload_rounded, size: 14, color: Colors.white),
+            const SizedBox(width: 4),
             const Text(
               'Export',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1303,12 +1308,24 @@ class _ExportButton extends StatelessWidget {
 // ─── Stat Cards ───────────────────────────────────────────────────────────────
 
 class _StatCards extends StatelessWidget {
-  const _StatCards({required this.stats, required this.selectedMonth});
+  const _StatCards({required this.stats, required this.selectedMonth, required this.selectedYear});
 
   final DashboardStats stats;
   final int selectedMonth;
+  final int selectedYear;
 
   String get _monthLabel => selectedMonth == 0 ? 'This Year' : 'This Month';
+
+  String get _yearSubLabel {
+    final currentYear = DateTime.now().year;
+    if (selectedYear < currentYear) return 'Full Year $selectedYear';
+    const months = [
+      '',
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return 'Jan \u2013 ${months[DateTime.now().month]} $selectedYear';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1324,6 +1341,7 @@ class _StatCards extends StatelessWidget {
         iconColor: AppColors.primaryBlue,
         value:     '${stats.guestsThisYear}',
         label:     'Guests This Year',
+        infoTooltip: _yearSubLabel,
       ),
       _StatCard(
         icon:      Icons.schedule_rounded,
@@ -1341,7 +1359,7 @@ class _StatCards extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 600) {
+        if (constraints.maxWidth < 900) {
           return Column(
             children: [
               Row(
@@ -1386,42 +1404,106 @@ class _StatCard extends StatelessWidget {
     required this.iconColor,
     required this.value,
     required this.label,
+    this.infoTooltip,
   });
 
   final IconData icon;
   final Color iconColor;
   final String value;
   final String label;
+  final String? infoTooltip;
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 600;
     return _DashCard(
       child: SizedBox(
         width: double.infinity,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: iconColor, size: 22),
-            const SizedBox(height: 14),
-            Text(
-              value,
-              style: const TextStyle(
-                color: AppColors.textWhite,
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
+        child: isDesktop
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Icon(icon, color: iconColor, size: 18),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        value,
+                        style: const TextStyle(
+                          color: AppColors.textWhite,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          style: const TextStyle(color: AppColors.textGray, fontSize: 12),
+                        ),
+                      ),
+                      if (infoTooltip != null) ...[
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: infoTooltip!,
+                          child: Icon(
+                            Icons.info_outline_rounded,
+                            size: 14,
+                            color: AppColors.textGray,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: iconColor, size: 18),
+                  const SizedBox(height: 10),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      color: AppColors.textWhite,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          style: const TextStyle(color: AppColors.textGray, fontSize: 12),
+                        ),
+                      ),
+                      if (infoTooltip != null) ...[
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: infoTooltip!,
+                          child: Icon(
+                            Icons.info_outline_rounded,
+                            size: 14,
+                            color: AppColors.textGray,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.textGray,
-                fontSize: 12.5,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -2486,7 +2568,7 @@ class _DashCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isSmall = MediaQuery.of(context).size.width < 500;
     return Container(
-      padding: EdgeInsets.all(isSmall ? 14 : 18),
+      padding: EdgeInsets.all(isSmall ? 12 : 16),
       decoration: BoxDecoration(
         color:        AppColors.cardBackground,
         borderRadius: BorderRadius.circular(12),

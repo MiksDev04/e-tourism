@@ -9,6 +9,7 @@ import 'package:app/ui/shared/pages/error_page.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/accommodation_export_service.dart';
 import '../../shared/layouts/admin_layout.dart';
+import '../../shared/widgets/action_icon_button.dart';
 import '../../shared/widgets/paginator.dart';
 import '../widgets/business_details_modal.dart';
 import '../models/accommodation_models.dart';
@@ -65,6 +66,7 @@ class _AdminAccommodationsPageState extends State<AdminAccommodationsPage> {
   static const List<int> _pageSizeOptions = [10, 20, 30];
 
   List<Accommodation> _accommodations = [];
+  Map<String, int>? _statusCounts;
   bool _isLoading = true;
   String? _error;
   int? _errorCode;
@@ -128,6 +130,20 @@ class _AdminAccommodationsPageState extends State<AdminAccommodationsPage> {
         _totalItems = result.totalCount;
         _isLoading = false;
       });
+      // Fire parallel status count requests
+      final statusCounts = <String, int>{};
+      final results = await Future.wait([
+        _api.fetchStatusCount('approved'),
+        _api.fetchStatusCount('pending'),
+        _api.fetchStatusCount('rejected'),
+        _api.fetchStatusCount('warning'),
+      ]);
+      final labels = ['approved', 'pending', 'rejected', 'warning'];
+      for (int i = 0; i < labels.length; i++) {
+        statusCounts[labels[i]] = results[i];
+      }
+      if (!mounted) return;
+      setState(() => _statusCounts = statusCounts);
     } catch (e) {
       final code = await classifyError(e);
       if (!mounted) return;
@@ -365,6 +381,7 @@ class _AdminAccommodationsPageState extends State<AdminAccommodationsPage> {
                           selectedTab: _selectedTab,
                           tabs: _filterTabs,
                           totalCount: _totalItems,
+                          statusCounts: _statusCounts,
                           onTabSelected: (i) {
                             setState(() {
                               _selectedTab = i;
@@ -876,75 +893,49 @@ class _PageHeader extends StatelessWidget {
   }
 }
 
-class _ExportIconButton extends StatefulWidget {
+class _ExportIconButton extends StatelessWidget {
   const _ExportIconButton({required this.onTap, required this.isLoading});
+
   final VoidCallback? onTap;
   final bool isLoading;
 
   @override
-  State<_ExportIconButton> createState() => _ExportIconButtonState();
-}
-
-class _ExportIconButtonState extends State<_ExportIconButton> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: widget.onTap != null
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: _hovered && widget.onTap != null
-                ? AppColors.primaryCyan.withOpacity(0.12)
-                : AppColors.cardBackground,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: _hovered && widget.onTap != null
-                  ? AppColors.primaryCyan.withOpacity(0.4)
-                  : AppColors.cardBorder,
-            ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppColors.gradientStart, AppColors.gradientEnd],
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.isLoading)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.5,
-                    color: AppColors.primaryCyan,
-                  ),
-                )
-              else
-                Icon(
-                  Icons.download_rounded,
-                  color: _hovered && widget.onTap != null
-                      ? AppColors.primaryCyan
-                      : AppColors.textGray,
-                  size: 16,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isLoading)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
                 ),
-              const SizedBox(width: 6),
-              Text(
-                widget.isLoading ? 'Exporting...' : 'Export',
-                style: TextStyle(
-                  color: _hovered && widget.onTap != null
-                      ? AppColors.primaryCyan
-                      : AppColors.textGray,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+              )
+            else
+              const Icon(Icons.upload_rounded, size: 14, color: Colors.white),
+            const SizedBox(width: 4),
+            const Text(
+              'Export',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1399,13 +1390,22 @@ class _FilterTabBar extends StatelessWidget {
     required this.selectedTab,
     required this.tabs,
     required this.totalCount,
+    this.statusCounts,
     required this.onTabSelected,
   });
 
   final int selectedTab;
   final List<_FilterTab> tabs;
   final int totalCount;
+  final Map<String, int>? statusCounts;
   final ValueChanged<int> onTabSelected;
+
+  int _countFor(int i) {
+    if (i == selectedTab) return totalCount;
+    final status = tabs[i].status;
+    if (status == null || statusCounts == null) return 0;
+    return statusCounts![status.name] ?? 0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1422,7 +1422,7 @@ class _FilterTabBar extends StatelessWidget {
                   padding: const EdgeInsets.only(right: 6),
                   child: _FilterChip(
                     label: tabs[i].label,
-                    count: isActive ? totalCount : 0,
+                    count: _countFor(i),
                     isActive: isActive,
                     onTap: () => onTabSelected(i),
                   ),
@@ -1438,7 +1438,7 @@ class _FilterTabBar extends StatelessWidget {
             final isActive = selectedTab == i;
             return _FilterChip(
               label: tabs[i].label,
-              count: isActive ? totalCount : 0,
+              count: _countFor(i),
               isActive: isActive,
               onTap: () => onTabSelected(i),
             );
@@ -1468,7 +1468,7 @@ class _FilterChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           gradient: isActive
               ? const LinearGradient(
@@ -1488,13 +1488,13 @@ class _FilterChip extends StatelessWidget {
               label,
               style: TextStyle(
                 color: isActive ? Colors.white : AppColors.textGray,
-                fontSize: 13,
+                fontSize: 11.5,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
                 color: isActive
                     ? Colors.white.withOpacity(0.25)
@@ -1505,7 +1505,7 @@ class _FilterChip extends StatelessWidget {
                 '$count',
                 style: TextStyle(
                   color: isActive ? Colors.white : AppColors.textGray,
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1530,23 +1530,24 @@ class _SearchBar extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.cardBorder),
       ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
-        style: const TextStyle(color: AppColors.textWhite, fontSize: 13.5),
+        style: const TextStyle(color: AppColors.textWhite, fontSize: 13),
         decoration: const InputDecoration(
           hintText: 'Search by name or owner...',
-          hintStyle: TextStyle(color: AppColors.textSubtle, fontSize: 13.5),
+          hintStyle: TextStyle(color: AppColors.textSubtle, fontSize: 13),
           prefixIcon: Icon(
             Icons.search_rounded,
             color: AppColors.textSubtle,
-            size: 20,
+            size: 18,
           ),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          isDense: true,
         ),
       ),
     );
@@ -2234,9 +2235,12 @@ class _ActionButtons extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _ActionIcon(
+          ActionIconButton(
             icon: Icons.remove_red_eye_outlined,
             tooltip: 'View Details',
+            color: AppColors.primaryCyan,
+            showBorder: true,
+            label: 'View',
             onTap: () {
               showBusinessDetailsModal(
                 context,
@@ -2267,7 +2271,7 @@ class _ActionButtons extends StatelessWidget {
           ),
           if (isPending) ...[
             const SizedBox(width: 8),
-            _ActionIcon(
+            ActionIconButton(
               icon: Icons.check_circle_outline_rounded,
               tooltip: 'Approve',
               color: const Color(0xFF00C48C),
@@ -2277,7 +2281,7 @@ class _ActionButtons extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            _ActionIcon(
+            ActionIconButton(
               icon: Icons.cancel_outlined,
               tooltip: 'Reject',
               color: const Color(0xFFFF4D6A),
@@ -2349,58 +2353,6 @@ class _ModalButtonState extends State<_ModalButton> {
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Action Icon ──────────────────────────────────────────────────────────────
-
-class _ActionIcon extends StatefulWidget {
-  const _ActionIcon({
-    required this.icon,
-    required this.onTap,
-    this.tooltip,
-    this.color,
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-  final String? tooltip;
-  final Color? color;
-
-  @override
-  State<_ActionIcon> createState() => _ActionIconState();
-}
-
-class _ActionIconState extends State<_ActionIcon> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = widget.color ?? AppColors.textGray;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: Tooltip(
-        message: widget.tooltip ?? '',
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: _hovered ? color.withOpacity(0.1) : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(
-              widget.icon,
-              color: _hovered ? color : color.withOpacity(0.7),
-              size: 18,
             ),
           ),
         ),

@@ -373,10 +373,10 @@ class _FilterTabBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 6, bottom: 6),
+      padding: const EdgeInsets.only(top: 2, bottom: 2),
       child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+        spacing: 6,
+        runSpacing: 6,
         children: [
           _FilterChip(
             label:    'All',
@@ -427,7 +427,7 @@ class _FilterChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding:  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding:  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           gradient: isActive
               ? const LinearGradient(
@@ -444,14 +444,14 @@ class _FilterChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (emoji != null) ...[
-              Text(emoji!, style: const TextStyle(fontSize: 12)),
+              Text(emoji!, style: const TextStyle(fontSize: 10)),
               const SizedBox(width: 5),
             ],
             Text(
               label,
               style: TextStyle(
                 color:      isActive ? Colors.white : AppColors.textGray,
-                fontSize:   13,
+                fontSize:   11.5,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
@@ -811,7 +811,7 @@ class _ErrorState extends StatelessWidget {
                 'Retry',
                 style: TextStyle(
                   color:      Colors.white,
-                  fontSize:   13,
+                fontSize:   11.5,
                   fontWeight: FontWeight.w600,
                 ),
               ),

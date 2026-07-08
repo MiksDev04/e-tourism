@@ -558,7 +558,7 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
                   builder: (context, constraints) {
                     final isNarrow = constraints.maxWidth < 600;
                     return SingleChildScrollView(
-                      padding: EdgeInsets.all(isNarrow ? 16 : 24),
+                      padding: EdgeInsets.all(isNarrow ? 12 : 24),
                       child: Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 560),
@@ -566,9 +566,9 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               _PageHeader(),
-                              const SizedBox(height: 20),
+                              SizedBox(height: isNarrow ? 12 : 20),
                               _BusinessCard(business: _business),
-                              const SizedBox(height: 16),
+                              SizedBox(height: isNarrow ? 10 : 16),
                               _AccountInfoCard(
                                 fullNameCtrl: _fullNameCtrl,
                                 usernameCtrl: _usernameCtrl,
@@ -579,12 +579,12 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
                                 isNarrow:     isNarrow,
                                 phoneError:   _phoneError,
                               ),
-                              const SizedBox(height: 16),
+                              SizedBox(height: isNarrow ? 10 : 16),
                               _SecurityCard(
                                 onChangePassword: _showChangePasswordDialog,
                                 onChangeEmail:    _showChangeEmailDialog,
                               ),
-                              const SizedBox(height: 16),
+                              SizedBox(height: isNarrow ? 10 : 16),
                               _BusinessDocumentsCard(
                                 business:            _business,
                                 selectedPermitFile:   _selectedPermitFile,
@@ -596,7 +596,7 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
                                 onUpload:             _uploadDocuments,
                                 hasRecord:            _business != null,
                               ),
-                              const SizedBox(height: 16),
+                              SizedBox(height: isNarrow ? 10 : 16),
                               _BusinessInfoCard(
                                 businessNameCtrl:   _businessNameCtrl,
                                 tradenameCtrl:      _tradenameCtrl,
@@ -947,16 +947,16 @@ class _SecurityRow extends StatelessWidget {
         GestureDetector(
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: AppColors.inputBackground,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(6),
               border: Border.all(color: AppColors.primaryCyan.withOpacity(0.4)),
             ),
             child: Text(buttonLabel,
                 style: const TextStyle(
                     color: AppColors.primaryCyan,
-                    fontSize: 12,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600)),
           ),
         ),
@@ -2231,15 +2231,20 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: child,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final n = constraints.maxWidth < 600;
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(n ? 14 : 22),
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.cardBorder),
+          ),
+          child: child,
+        );
+      },
     );
   }
 }
@@ -2474,12 +2479,12 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 42,
+      height: 36,
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
               colors: [AppColors.gradientStart, AppColors.gradientEnd]),
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(8),
           boxShadow: [
             BoxShadow(
               color: AppColors.primaryBlue.withOpacity(0.3),
@@ -2494,17 +2499,17 @@ class _ActionButton extends StatelessWidget {
                   width: 14, height: 14,
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: Colors.white))
-              : Icon(icon, size: 16, color: Colors.white),
+              : Icon(icon, size: 14, color: Colors.white),
           label: Text(label,
               style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 13.5,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600)),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(9)),
+                borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ),
