@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/document_service.dart';
 import '../../business/widgets/business_document_preview_modal.dart';
 import '../models/accommodation_models.dart';
 
@@ -465,6 +466,7 @@ class _DocumentsSection extends StatelessWidget {
       );
       return;
     }
+    DocumentService.instance.prefetch(url);
     showDocumentPreviewModal(context, title, url);
   }
 

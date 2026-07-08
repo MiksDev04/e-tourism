@@ -10,6 +10,7 @@ import '../widgets/business_document_preview_modal.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/services/document_service.dart';
 import '../../shared/layouts/business_layout.dart';
 import '../widgets/offline_state.dart';
 import '../../../api/business_profile_api.dart';
@@ -448,6 +449,7 @@ class _BusinessProfilePageState extends State<BusinessProfilePage> {
       _showSnack('Document URL not available.');
       return;
     }
+    DocumentService.instance.prefetch(url);
     showDocumentPreviewModal(context, title, url);
   }
 

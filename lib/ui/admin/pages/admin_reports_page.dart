@@ -184,9 +184,14 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   }
 
   // ── View Report ───────────────────────────────────────────────────────────
-
+  
   void _viewReport(GeneratedReport report) {
     if (!report.hasFile) return;
+    
+    final pdfUrl = report.pdfUrl ??
+        report.fileUrl!.replaceAll('.xlsx', '.pdf');
+    _reportService.downloadReportFile(pdfUrl);
+    
     showDialog(
       context: context,
       barrierColor: Colors.black87,

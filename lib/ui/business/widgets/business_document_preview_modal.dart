@@ -1,44 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:http/http.dart' as http;
 import 'package:printing/printing.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/services/document_service.dart';
 import '../../../core/services/file_saver.dart';
 import '../../../core/services/session_service.dart';
 
-// ─── Resolve URL Helper ──────────────────────────────────────────────────────
-
-String _resolveUrl(String relativeOrAbsoluteUrl) {
-  if (relativeOrAbsoluteUrl.isEmpty) return '';
-  if (relativeOrAbsoluteUrl.startsWith('http://') || relativeOrAbsoluteUrl.startsWith('https://')) {
-    return relativeOrAbsoluteUrl;
-  }
-
-  final String backendUrl;
-  if (kIsWeb) {
-    backendUrl = const String.fromEnvironment(
-      'BACKEND_URL',
-      defaultValue: 'http://localhost:3000',
-    );
-  } else if (defaultTargetPlatform == TargetPlatform.android) {
-    backendUrl = dotenv.env['ANDROID_BACKEND_URL'] ?? 'http://10.0.2.2:3000';
-  } else {
-    backendUrl = dotenv.env['BACKEND_URL'] ?? 'http://localhost:3000';
-  }
-
-  final cleanBackend = backendUrl.endsWith('/')
-      ? backendUrl.substring(0, backendUrl.length - 1)
-      : backendUrl;
-  final cleanRelative = relativeOrAbsoluteUrl.startsWith('/')
-      ? relativeOrAbsoluteUrl
-      : '/$relativeOrAbsoluteUrl';
-
-  return '$cleanBackend$cleanRelative';
-}
-
 // ─── Document Preview Dialog ────────────────────────────────────────────────
+
 
 Future<void> showDocumentPreviewModal(
   BuildContext context,
@@ -112,45 +82,26 @@ class _DocumentPreviewModalState extends State<DocumentPreviewModal> {
   }
 
   Future<void> _loadDocument() async {
-    if (widget.url.isEmpty) {
-      setState(() {
-        _error = 'Document URL is empty.';
-        _loading = false;
-      });
-      return;
-    }
-
     try {
-      final resolved = _resolveUrl(widget.url);
-      final token = SessionService.instance.current?.token;
-      final apiKey = kIsWeb
-          ? const String.fromEnvironment('API_KEY', defaultValue: '')
-          : (dotenv.env['API_KEY'] ?? '');
-
-      final headers = {
-        'x-api-key': apiKey,
-        if (token != null) 'Authorization': 'Bearer $token',
-      };
-
-      final response = await http.get(Uri.parse(resolved), headers: headers);
-      if (response.statusCode == 200) {
-        if (mounted) {
-          final bytes = response.bodyBytes;
-          setState(() {
-            _bytes = bytes;
-            _docType = _detectDocType(bytes);
-            _loading = false;
-          });
-        }
-      } else {
-        throw Exception('HTTP Error ${response.statusCode}');
+      final bytes = await DocumentService.instance.fetchDocument(widget.url);
+      if (mounted) {
+        setState(() {
+          _bytes = bytes;
+          _docType = _detectDocType(bytes);
+          _loading = false;
+        });
       }
     } catch (e) {
       if (mounted) {
+        final code = await classifyError(e);
         setState(() {
-          _error = isNetworkError(e)
-              ? 'No internet connection. Please check your network and try again.'
-              : 'Something went wrong. Please try again.';
+          if (code == 503) {
+            _error = 'No internet connection. Please check your network and try again.';
+          } else if (code == 408) {
+            _error = 'Request timed out. Please try again.';
+          } else {
+            _error = 'Something went wrong. Please try again.';
+          }
           _loading = false;
         });
       }
@@ -407,14 +358,9 @@ class _DocumentPreviewModalState extends State<DocumentPreviewModal> {
                                       bottomLeft: Radius.circular(16),
                                       bottomRight: Radius.circular(16),
                                     ),
-                                    child: PdfPreview(
-                                      build: (format) => _bytes!,
-                                      useActions: false,
-                                      loadingWidget: const Center(
-                                        child: CircularProgressIndicator(
-                                          color: AppColors.primaryCyan,
-                                        ),
-                                      ),
+                                     child: PdfPreview(
+                                       build: (format) => _bytes!,
+                                       useActions: false,
                                     ),
                                   )
                                 : _docType == _DocType.unknown
@@ -450,6 +396,7 @@ class _DocumentPreviewModalState extends State<DocumentPreviewModal> {
                                           child: Center(
                                             child: Image.memory(
                                               _bytes!,
+                                              width: 800,
                                               fit: BoxFit.contain,
                                             ),
                                           ),

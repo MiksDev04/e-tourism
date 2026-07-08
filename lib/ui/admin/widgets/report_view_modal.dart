@@ -45,6 +45,16 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
   @override
   void initState() {
     super.initState();
+    
+    final pdfUrl = widget.report.pdfUrl ??
+        widget.report.fileUrl!.replaceAll('.xlsx', '.pdf');
+        
+    final cachedBytes = _reportService.getCachedFile(pdfUrl);
+    if (cachedBytes != null) {
+      _pdfBytes = cachedBytes;
+      _loading = false;
+    }
+    
     _loadPdf();
   }
 
@@ -78,10 +88,15 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
       });
     } catch (e) {
       if (!mounted) return;
+      final code = await classifyError(e);
       setState(() {
-        _error = isNetworkError(e)
-            ? 'No internet connection. Please check your network and try again.'
-            : 'Something went wrong. Please try again.';
+        if (code == 503) {
+          _error = 'No internet connection. Please check your network and try again.';
+        } else if (code == 408) {
+          _error = 'Request timed out. Please try again.';
+        } else {
+          _error = 'Something went wrong. Please try again.';
+        }
         _loading = false;
       });
     }
@@ -271,11 +286,13 @@ class _ReportViewerModalState extends State<ReportViewerModal> {
                         _loadPdf();
                       },
                     )
-                  : _PdfView(
-                      pdfBytes: _pdfBytes!,
-                      zoomScale: _zoomScale,
-                      onZoomChanged: _setZoom,
-                    ),
+                   : _pdfBytes == null
+                       ? const _LoadingView()
+                       : _PdfView(
+                           pdfBytes: _pdfBytes!,
+                           zoomScale: _zoomScale,
+                           onZoomChanged: _setZoom,
+                         ),
             ),
           ],
         ),
@@ -381,19 +398,18 @@ class _PdfViewState extends State<_PdfView> {
                 child: GestureDetector(
                   onScaleStart: _onScaleStart,
                   onScaleUpdate: _onScaleUpdate,
-                  child: PdfPreview(
-                    build: (format) => widget.pdfBytes,
-                    useActions: false,
-                    canChangePageFormat: false,
-                    canChangeOrientation: false,
-                    canDebug: false,
-                    maxPageWidth: targetWidth,
-                    loadingWidget: const _LoadingView(),
-                    onError: (context, error) =>
-                        const _ErrorView(error: 'Could not render PDF.'),
-                    scrollViewDecoration: const BoxDecoration(
-                      color: Colors.transparent,
-                    ),
+                                    child: PdfPreview(
+                                      build: (format) => widget.pdfBytes,
+                                      useActions: false,
+                                      canChangePageFormat: false,
+                                      canChangeOrientation: false,
+                                      canDebug: false,
+                                      maxPageWidth: targetWidth,
+                                      onError: (context, error) =>
+                                          const _ErrorView(error: 'Could not render PDF.'),
+                                      scrollViewDecoration: const BoxDecoration(
+                                        color: Colors.transparent,
+                                      ),
                     pdfPreviewPageDecoration: BoxDecoration(
                       color: Colors.white,
                       border: Border.all(

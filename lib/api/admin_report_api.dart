@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:collection';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'base_api.dart';
@@ -91,6 +92,9 @@ class ReportParams {
 // ─── Report Service ───────────────────────────────────────────────────────────
 
 class ReportService extends BaseApi {
+  static const _maxCacheEntries = 20;
+  static final _fileCache = LinkedHashMap<String, Uint8List>();
+
   /// Fetches paginated generated reports from the backend.
   Future<({List<GeneratedReport> data, int totalCount, int pageCount})> fetchReports({
     int page = 1,
@@ -122,12 +126,40 @@ class ReportService extends BaseApi {
     final uri = fileUrl.startsWith('http')
         ? Uri.parse(fileUrl)
         : Uri.parse('$baseUrl$fileUrl');
-    final response = await http.get(uri, headers: headers);
+    final key = uri.toString();
+
+    final cached = _fileCache[key];
+    if (cached != null) return cached;
+
+    final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 30));
     if (response.statusCode == 200) {
-      return response.bodyBytes;
+      final bytes = response.bodyBytes;
+      _cacheFile(key, bytes);
+      return bytes;
     } else {
       throw Exception('Failed to download report: ${response.statusCode}');
     }
+  }
+
+  static void _cacheFile(String key, Uint8List bytes) {
+    if (_fileCache.length >= _maxCacheEntries) {
+      _fileCache.remove(_fileCache.keys.first);
+    }
+    _fileCache[key] = bytes;
+  }
+
+  Uint8List? getCachedFile(String fileUrl) {
+    final uri = fileUrl.startsWith('http')
+        ? Uri.parse(fileUrl)
+        : Uri.parse('$baseUrl$fileUrl');
+    return _fileCache[uri.toString()];
+  }
+
+  bool isCached(String fileUrl) {
+    final uri = fileUrl.startsWith('http')
+        ? Uri.parse(fileUrl)
+        : Uri.parse('$baseUrl$fileUrl');
+    return _fileCache.containsKey(uri.toString());
   }
 
   /// Generates reports on the backend (one per establishment).

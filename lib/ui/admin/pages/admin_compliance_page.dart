@@ -15,7 +15,7 @@ import '../widgets/business_tourist_stats_modal.dart';
 // ─── Filter Options ───────────────────────────────────────────────────────────
 
 const _activityStatusOptions = [
-  'All Statuses',
+  'All activity status',
   'Active',
   'Low Activity',
   'Inactive',
@@ -52,7 +52,7 @@ class _AdminCompliancePageState extends State<AdminCompliancePage> {
   int? _errorCode;
 
   String _searchQuery = '';
-  String _selectedActivityStatus = 'All Statuses';
+  String _selectedActivityStatus = 'All activity status';
   String _selectedBusinessStatus = 'All Business Statuses';
   String _selectedBusinessLine = 'All Business Lines';
 
@@ -95,7 +95,7 @@ class _AdminCompliancePageState extends State<AdminCompliancePage> {
         page: _currentPage + 1,
         pageSize: _pageSize,
         searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
-        activityStatus: _selectedActivityStatus != 'All Statuses' ? _selectedActivityStatus : null,
+        activityStatus: _selectedActivityStatus != 'All activity status' ? _selectedActivityStatus : null,
         businessStatus: _selectedBusinessStatus != 'All Business Statuses' ? _selectedBusinessStatus : null,
         businessLine: _selectedBusinessLine != 'All Business Lines' ? _selectedBusinessLine : null,
       );
@@ -963,13 +963,78 @@ class _ComplianceRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: [
-                          _ActivityBadge(status: record.activityStatus),
-                          _BusinessStatusBadge(status: record.businessStatus),
-                        ],
+                      LayoutBuilder(
+                        builder: (ctx, bc) {
+                          final columnWidth = (bc.maxWidth - 8) / 2;
+                          return Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              SizedBox(
+                                width: columnWidth,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Activity Status',
+                                      style: TextStyle(
+                                        color: AppColors.textGray,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    LayoutBuilder(
+                                      builder: (ctx2, bc2) => ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          maxWidth: bc2.maxWidth,
+                                        ),
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerLeft,
+                                          child: _ActivityBadge(
+                                            status: record.activityStatus,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(
+                                width: columnWidth,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Business Status',
+                                      style: TextStyle(
+                                        color: AppColors.textGray,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    LayoutBuilder(
+                                      builder: (ctx2, bc2) => ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          maxWidth: bc2.maxWidth,
+                                        ),
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerLeft,
+                                          child: _BusinessStatusBadge(
+                                            status: record.businessStatus,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       const SizedBox(height: 8),
                       Row(
