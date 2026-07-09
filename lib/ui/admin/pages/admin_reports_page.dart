@@ -684,60 +684,70 @@ class _ViewButtonState extends State<_ViewButton> {
   @override
   Widget build(BuildContext context) {
     if (!widget.hasFile) {
-      return const Tooltip(
-        message: 'File unavailable',
-        child: Icon(
-          Icons.error_outline_rounded,
-          color: Color(0xFFFF4D6A),
-          size: 18,
-        ),
+      return const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: 'File unavailable',
+            child: Icon(
+              Icons.error_outline_rounded,
+              color: Color(0xFFFF4D6A),
+              size: 18,
+            ),
+          ),
+        ],
       );
     }
     final color = AppColors.primaryCyan;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: Tooltip(
-        message: 'View Report',
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: _hovered
-                  ? color.withOpacity(0.12)
-                  : color.withOpacity(0.04),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: _hovered
-                    ? color.withOpacity(0.7)
-                    : color.withOpacity(0.35),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.open_in_full_rounded,
-                  color: _hovered ? color : color.withOpacity(0.7),
-                  size: 13,
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  'View',
-                  style: TextStyle(
-                    color: _hovered ? color : color.withOpacity(0.7),
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          cursor: SystemMouseCursors.click,
+          child: Tooltip(
+            message: 'View Report',
+            child: GestureDetector(
+              onTap: widget.onTap,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _hovered
+                      ? color.withOpacity(0.12)
+                      : color.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: _hovered
+                        ? color.withOpacity(0.7)
+                        : color.withOpacity(0.35),
                   ),
                 ),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.open_in_full_rounded,
+                      color: _hovered ? color : color.withOpacity(0.7),
+                      size: 13,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'View',
+                      style: TextStyle(
+                        color: _hovered ? color : color.withOpacity(0.7),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 }
