@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:app/core/constants/app_colors.dart';
 import 'package:app/router/app_router.dart';
 import 'package:app/core/services/offline_service.dart';
+import 'package:app/core/services/session_service.dart';
 import 'dart:async';
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -11,25 +12,38 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'San Pablo Tourism Admin',
-      debugShowCheckedModeBanner: false,
-
-      // ── Theme ──────────────────────────────────────────────────────────────
-      theme: _buildTheme(),
-
-      // ── Routing ────────────────────────────────────────────────────────────
-      initialRoute: AppRouter.initialRoute,
-      onGenerateRoute: AppRouter.onGenerateRoute,
+    return ListenableBuilder(
+      listenable: SessionService.instance,
       builder: (context, child) {
-        return Column(
-          children: [
-            Expanded(child: child ?? const SizedBox.shrink()),
-            const SyncBannerOverlay(),
-          ],
+        return MaterialApp(
+          title: _getDynamicTitle(),
+          debugShowCheckedModeBanner: false,
+
+          // ── Theme ──────────────────────────────────────────────────────────────
+          theme: _buildTheme(),
+
+          // ── Routing ────────────────────────────────────────────────────────────
+          initialRoute: AppRouter.initialRoute,
+          onGenerateRoute: AppRouter.onGenerateRoute,
+          builder: (context, child) {
+            return Column(
+              children: [
+                Expanded(child: child ?? const SizedBox.shrink()),
+                const SyncBannerOverlay(),
+              ],
+            );
+          },
         );
       },
     );
+  }
+
+  static String _getDynamicTitle() {
+    final session = SessionService.instance.current;
+    if (session == null) return 'San Pablo Tourism';
+    if (session.role == 'admin') return 'San Pablo Tourism Admin';
+    if (session.role == 'business') return 'San Pablo Tourism Business';
+    return 'San Pablo Tourism';
   }
 
   static ThemeData _buildTheme() {

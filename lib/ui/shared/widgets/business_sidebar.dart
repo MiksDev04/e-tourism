@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/session_service.dart';
 import '../../../api/messages_api.dart';
 import '../../../router/app_routes.dart';
 
@@ -178,55 +177,43 @@ class _SidebarBrand extends StatelessWidget {
   }
 }
 
-// ─── Business Badge ── reads from SessionService ──────────────────────────────
+// ─── Business Badge ───────────────────────────────────────────────────────────
 
 class _BusinessBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: SessionService.instance,
-      builder: (context, _) {
-        final businessName =
-            SessionService.instance.current?.businessName ?? 'My Business';
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.accentPurple.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.accentPurple.withOpacity(0.35)),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.accentPurple.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.accentPurple.withOpacity(0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                color: AppColors.accentPurple,
+                shape: BoxShape.circle,
+              ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(
-                    color: AppColors.accentPurple,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    businessName,
-                    style: const TextStyle(
-                      color: AppColors.accentPurple,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            const SizedBox(width: 6),
+            const Text(
+              'Business',
+              style: TextStyle(
+                color: AppColors.accentPurple,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }

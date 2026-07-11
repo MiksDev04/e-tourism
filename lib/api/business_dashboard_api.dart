@@ -95,11 +95,13 @@ class DashboardData {
 class BusinessDetails {
   const BusinessDetails({
     required this.address,
+    required this.barangay,
     required this.totalRooms,
     required this.businessLine,
   });
 
   final String address;
+  final String barangay;
   final int totalRooms;
   final List<String> businessLine;
 }
@@ -206,12 +208,14 @@ class BusinessDashboardApi extends BaseApi {
       if (data == null) {
         return const BusinessDetails(
           address: '',
+          barangay: '',
           totalRooms: 0,
           businessLine: [],
         );
       }
 
       final street = (data['street'] as String?) ?? '';
+      final barangay = (data['barangay'] as String?) ?? '';
       final rawBusinessLine = data['business_line'];
       List<String> businessLine = [];
       if (rawBusinessLine is List) {
@@ -231,12 +235,14 @@ class BusinessDashboardApi extends BaseApi {
 
       return BusinessDetails(
         address: street,
+        barangay: barangay,
         totalRooms: (data['total_rooms'] as int?) ?? 0,
         businessLine: businessLine,
       );
     } catch (_) {
       return const BusinessDetails(
         address: '',
+        barangay: '',
         totalRooms: 0,
         businessLine: [],
       );
@@ -257,6 +263,7 @@ class BusinessDashboardApi extends BaseApi {
     if (rows.isEmpty) {
       return const BusinessDetails(
         address: '',
+        barangay: '',
         totalRooms: 0,
         businessLine: [],
       );
@@ -264,6 +271,7 @@ class BusinessDashboardApi extends BaseApi {
 
     final row = rows.first;
     final street = (row['street'] as String?) ?? '';
+    final barangay = (row['barangay'] as String?) ?? '';
     final rawBusinessLine = row['business_line'] as String?;
 
     // business_line is stored as a JSON string e.g. '["Hotel","Resort"]'
@@ -281,6 +289,7 @@ class BusinessDashboardApi extends BaseApi {
 
     return BusinessDetails(
       address: street,
+      barangay: barangay,
       totalRooms: (row['total_rooms'] as int?) ?? 0,
       businessLine: businessLine,
     );

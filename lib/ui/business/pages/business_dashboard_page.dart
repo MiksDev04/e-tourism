@@ -208,7 +208,7 @@ class _BusinessDashboardPageState extends State<BusinessDashboardPage> {
       _businessId   = resolvedBusinessId;
       _businessName = session?.businessName ?? '';
       _businessLine = session?.businessLine ?? const [];
-      _address      = session?.street ?? _address;
+      _address      = '${session?.street ?? ''}, ${session?.barangay ?? ''}';
       _totalRooms   = session?.totalRooms ?? _totalRooms;
     });
 
@@ -220,7 +220,7 @@ class _BusinessDashboardPageState extends State<BusinessDashboardPage> {
         );
         if (!mounted) return;
         setState(() {
-          _address      = details.address;
+          _address      = '${details.address}, ${details.barangay}';
           _totalRooms   = details.totalRooms;
           _businessLine = details.businessLine.isNotEmpty
               ? details.businessLine
@@ -818,7 +818,6 @@ class _BusinessDashboardPageState extends State<BusinessDashboardPage> {
                             _HotelHeader(
                               name:          _businessName,
                               businessLines: _businessLine,
-                              rooms:         _totalRooms,
                               address:       _address,
                             ),
                             const SizedBox(height: 16),
@@ -844,7 +843,6 @@ class _BusinessDashboardPageState extends State<BusinessDashboardPage> {
                                   child: _HotelHeader(
                                     name:          _businessName,
                                     businessLines: _businessLine,
-                                    rooms:         _totalRooms,
                                     address:       _address,
                                   ),
                                 ),
@@ -1056,13 +1054,11 @@ class _HotelHeader extends StatelessWidget {
   const _HotelHeader({
     required this.name,
     required this.businessLines,
-    required this.rooms,
     required this.address,
   });
 
   final String name;
   final List<String> businessLines;
-  final int rooms;
   final String address;
 
   @override
@@ -1114,7 +1110,7 @@ class _HotelHeader extends StatelessWidget {
           ),
         const SizedBox(height: 6),
         Text(
-          '$rooms Rooms  •  $address',
+          '$address',
           style: const TextStyle(color: AppColors.textGray, fontSize: 13),
         ),
       ],
