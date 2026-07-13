@@ -22,26 +22,31 @@ const _kFieldHeight = 40.0;
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
-class DemographicRow {
-  DemographicRow()
+class AgeGroupRow {
+  AgeGroupRow({required this.ageGroup, this.male = 0, this.female = 0});
+
+  final String ageGroup;
+  int male;
+  int female;
+
+  int get total => male + female;
+}
+
+class GuestGroup {
+  GuestGroup()
     : country = null,
       nationality = null,
       region = null,
-      sex = null,
-      ageGroup = null,
       isOverseas = false,
-      countCtrl = TextEditingController(text: '');
+      ageRows = [];
 
   String? country;
-  String?
-  nationality; // 'Filipino' | 'Foreign' — only when country = Philippines
+  String? nationality;
   String? region;
-  String? sex;
-  String? ageGroup;
   bool isOverseas;
-  final TextEditingController countCtrl;
+  final List<AgeGroupRow> ageRows;
 
-  void dispose() => countCtrl.dispose();
+  int get groupTotal => ageRows.fold(0, (sum, r) => sum + r.male + r.female);
 }
 
 // ─── Options ──────────────────────────────────────────────────────────────────
@@ -152,8 +157,6 @@ const _regionOptions = [
   'BARMM',
 ];
 
-const _sexOptions = ['Male', 'Female'];
-
 const _ageGroupOptions = [
   '0–9',
   '10–17',
@@ -193,12 +196,17 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
   bool _isSaving = false;
 
   Map<String, String?> _errors = {};
-  List<Map<String, String?>> _rowErrors = [];
+  List<Map<String, String?>> _groupErrors = [];
 
-  final List<DemographicRow> _rows = [DemographicRow()];
+  final List<GuestGroup> _groups = [GuestGroup()];
+
+  // Temp controllers for the progressive age-add control per group.
+  String? _pendingAgeGroup;
+  final _pendingMaleCtrl = TextEditingController(text: '');
+  final _pendingFemaleCtrl = TextEditingController(text: '');
+  String? _ageAddError;
 
   // ── Connectivity state ────────────────────────────────────────────────────
-  // _isOffline: mirrors the current network status, used for the offline strip.
   bool _isOffline = false;
   StreamSubscription<bool>? _connectivitySub;
 
@@ -207,7 +215,7 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
   @override
   void initState() {
     super.initState();
-    _rowErrors = [{}];
+    _groupErrors = [{}];
     _isOffline = !ConnectivityService.instance.isOnline;
     _subscribeToConnectivity();
     _loadBusinessId();
@@ -220,7 +228,8 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
     _roomsOccupiedCtrl.dispose();
     _purposeOtherCtrl.dispose();
     _transportOtherCtrl.dispose();
-    for (final r in _rows) r.dispose();
+    _pendingMaleCtrl.dispose();
+    _pendingFemaleCtrl.dispose();
     super.dispose();
   }
 
@@ -263,21 +272,20 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
   }
 
   int get _demographicTotal =>
-      _rows.fold(0, (sum, r) => sum + (int.tryParse(r.countCtrl.text) ?? 0));
+      _groups.fold(0, (sum, g) => sum + g.groupTotal);
 
   int get _totalGuests => int.tryParse(_totalGuestsCtrl.text) ?? 0;
 
-  void _addRow() => setState(() {
-    _rows.add(DemographicRow());
-    _rowErrors.add({});
-  });
+  void _addGroup() => setState(() {
+        _groups.add(GuestGroup());
+        _groupErrors.add({});
+      });
 
-  void _removeRow(int index) {
-    if (_rows.length <= 1) return;
+  void _removeGroup(int index) {
+    if (_groups.length <= 1) return;
     setState(() {
-      _rows[index].dispose();
-      _rows.removeAt(index);
-      _rowErrors.removeAt(index);
+      _groups.removeAt(index);
+      _groupErrors.removeAt(index);
     });
   }
 
@@ -287,11 +295,11 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
     }
   }
 
-  void _clearRowFieldError(int index, String key) {
-    if (_rowErrors.length > index && _rowErrors[index].containsKey(key)) {
+  void _clearGroupError(int index, String key) {
+    if (_groupErrors.length > index && _groupErrors[index].containsKey(key)) {
       setState(() {
-        _rowErrors = List.from(_rowErrors);
-        _rowErrors[index] = Map.from(_rowErrors[index])..remove(key);
+        _groupErrors = List.from(_groupErrors);
+        _groupErrors[index] = Map.from(_groupErrors[index])..remove(key);
       });
     }
   }
@@ -319,17 +327,21 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
       _showPurposeOther = false;
       _showTransportOther = false;
       _errors = {};
-      for (final r in _rows) r.dispose();
-      _rows
+      _pendingAgeGroup = null;
+      _pendingMaleCtrl.clear();
+      _pendingFemaleCtrl.clear();
+      _ageAddError = null;
+      _groups
         ..clear()
-        ..add(DemographicRow());
-      _rowErrors = [{}];
+        ..add(GuestGroup());
+      _groupErrors = [{}];
     });
   }
 
   bool _validateAndSetErrors() {
     final errors = <String, String?>{};
-    final rowErrors = List.generate(_rows.length, (_) => <String, String?>{});
+    final groupErrs =
+        List.generate(_groups.length, (_) => <String, String?>{});
     bool hasError = false;
 
     if (_checkIn == null) {
@@ -366,7 +378,8 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
       errors['roomsOccupied'] = 'Rooms cannot exceed total guests.';
       hasError = true;
     } else if (_nightsCount > 0 && rooms == 0) {
-      errors['roomsOccupied'] = 'At least 1 room is required when staying overnight.';
+      errors['roomsOccupied'] =
+          'At least 1 room is required when staying overnight.';
       hasError = true;
     }
 
@@ -387,48 +400,40 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
       hasError = true;
     }
 
-    final seen = <String>{};
-    for (int i = 0; i < _rows.length; i++) {
-      final row = _rows[i];
+    // ── Group-level validation ─────────────────────────────────────────────
+    final seenOriginKeys = <String>{};
+    for (int i = 0; i < _groups.length; i++) {
+      final g = _groups[i];
+      final gerr = <String, String?>{};
 
-      if (row.isOverseas) {
-        // Overseas: no location fields to validate — only sex, age, count required.
-      } else {
-        if (row.country == null) {
-          rowErrors[i]['country'] = 'Required';
+      if (!g.isOverseas) {
+        if (g.country == null) {
+          gerr['country'] = 'Please select a country.';
           hasError = true;
-        }
-        if (row.country == 'Philippines') {
-          if (row.nationality == null) {
-            rowErrors[i]['nationality'] = 'Required';
-            hasError = true;
-          }
-        }
-      }
-
-      if (row.sex == null) {
-        rowErrors[i]['sex'] = 'Required';
-        hasError = true;
-      }
-      if (row.ageGroup == null) {
-        rowErrors[i]['ageGroup'] = 'Required';
-        hasError = true;
-      }
-      final count = int.tryParse(row.countCtrl.text) ?? 0;
-      if (count <= 0) {
-        rowErrors[i]['count'] = 'Min 1';
-        hasError = true;
-      }
-
-      if (row.sex != null && row.ageGroup != null) {
-        final key = row.isOverseas
-            ? 'overseas|${row.sex}|${row.ageGroup}'
-            : '${row.country}|${row.nationality}|${row.region}|${row.sex}|${row.ageGroup}';
-        if (!seen.add(key)) {
-          rowErrors[i]['country'] = 'Duplicate row — merge counts instead';
+        } else if (g.country == 'Philippines' && g.nationality == null) {
+          gerr['nationality'] = 'Please select nationality.';
           hasError = true;
         }
       }
+
+      if (g.groupTotal <= 0 && gerr.isEmpty) {
+        gerr['ageRows'] =
+            'Add at least one age group with headcount, or remove this group.';
+        hasError = true;
+      }
+
+      // Duplicate origin check (only when origin fields are valid)
+      if (gerr.isEmpty) {
+        final key = g.isOverseas
+            ? 'overseas'
+            : '${g.country}|${g.country == 'Philippines' ? g.nationality : ''}|${g.country == 'Philippines' ? (g.region ?? '') : ''}';
+        if (!seenOriginKeys.add(key)) {
+          gerr['duplicate'] = 'Duplicate origin — merge into one group.';
+          hasError = true;
+        }
+      }
+
+      groupErrs[i] = gerr;
     }
 
     if (!hasError && guests != null && guests > 0) {
@@ -441,7 +446,7 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
 
     setState(() {
       _errors = errors;
-      _rowErrors = rowErrors;
+      _groupErrors = groupErrs;
     });
 
     return !hasError;
@@ -469,6 +474,40 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
         ? _transportOtherCtrl.text.trim()
         : _transport!;
 
+    final breakdowns = <GuestBreakdownData>[];
+    for (final g in _groups) {
+      for (final row in g.ageRows) {
+        if (row.male > 0) {
+          breakdowns.add(GuestBreakdownData(
+            country: g.isOverseas ? null : mapToReportFormat(g.country!),
+            nationality: (g.isOverseas || g.country != 'Philippines')
+                ? null
+                : g.nationality,
+            philippinesRegion:
+                (!g.isOverseas && g.country == 'Philippines') ? g.region : null,
+            sex: 'Male',
+            ageGroup: row.ageGroup,
+            count: row.male,
+            isOverseas: g.isOverseas,
+          ));
+        }
+        if (row.female > 0) {
+          breakdowns.add(GuestBreakdownData(
+            country: g.isOverseas ? null : mapToReportFormat(g.country!),
+            nationality: (g.isOverseas || g.country != 'Philippines')
+                ? null
+                : g.nationality,
+            philippinesRegion:
+                (!g.isOverseas && g.country == 'Philippines') ? g.region : null,
+            sex: 'Female',
+            ageGroup: row.ageGroup,
+            count: row.female,
+            isOverseas: g.isOverseas,
+          ));
+        }
+      }
+    }
+
     final result = await _api.saveGuestEntry(
       GuestEntryData(
         businessId: _businessId!,
@@ -478,23 +517,7 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
         roomsOccupied: int.parse(_roomsOccupiedCtrl.text),
         purposeOfVisit: purposeValue,
         transportationMode: transportValue,
-        breakdowns: _rows
-            .map(
-              (r) => GuestBreakdownData(
-                country: r.isOverseas ? null : mapToReportFormat(r.country!),
-                nationality: (r.isOverseas || r.country != 'Philippines')
-                    ? null
-                    : r.nationality,
-                philippinesRegion: (!r.isOverseas && r.country == 'Philippines')
-                    ? r.region
-                    : null,
-                sex: r.sex!,
-                ageGroup: r.ageGroup!,
-                count: int.parse(r.countCtrl.text),
-                isOverseas: r.isOverseas,
-              ),
-            )
-            .toList(),
+        breakdowns: breakdowns,
       ),
     );
 
@@ -648,16 +671,72 @@ class _BusinessGuestEntryPageState extends State<BusinessGuestEntryPage> {
                   const SizedBox(height: 16),
 
                   _DemographicCard(
-                    rows: _rows,
+                    groups: _groups,
                     total: _totalGuests,
                     currentSum: _demographicTotal,
                     errors: _errors,
-                    rowErrors: _rowErrors,
-                    onAddRow: _addRow,
-                    onRemoveRow: _removeRow,
-                    onRowChanged: (int rowIndex, String fieldKey) {
+                    groupErrors: _groupErrors,
+                    pendingAgeGroup: _pendingAgeGroup,
+                    pendingMaleCtrl: _pendingMaleCtrl,
+                    pendingFemaleCtrl: _pendingFemaleCtrl,
+                    ageAddError: _ageAddError,
+                    onAddGroup: _addGroup,
+                    onRemoveGroup: _removeGroup,
+                    onGroupChanged: (int groupIndex, String fieldKey) {
                       setState(() {});
-                      _clearRowFieldError(rowIndex, fieldKey);
+                      _clearGroupError(groupIndex, fieldKey);
+                      _clearFieldError('demographicSum');
+                    },
+                    onAgeGroupChanged: (String? v) {
+                      setState(() {
+                        _pendingAgeGroup = v;
+                        _ageAddError = null;
+                      });
+                    },
+                    onAddAgeRow: (int groupIndex) {
+                      final g = _groups[groupIndex];
+                      final male =
+                          int.tryParse(_pendingMaleCtrl.text) ?? 0;
+                      final female =
+                          int.tryParse(_pendingFemaleCtrl.text) ?? 0;
+                      if (_pendingAgeGroup == null) {
+                        setState(() => _ageAddError = 'Select an age group first.');
+                        return;
+                      }
+                      if (male <= 0 && female <= 0) {
+                        setState(() => _ageAddError = 'Enter at least 1 guest for this age group.');
+                        return;
+                      }
+                      setState(() {
+                        g.ageRows.add(AgeGroupRow(
+                          ageGroup: _pendingAgeGroup!,
+                          male: male,
+                          female: female,
+                        ));
+                        _pendingAgeGroup = null;
+                        _pendingMaleCtrl.clear();
+                        _pendingFemaleCtrl.clear();
+                        _ageAddError = null;
+                      });
+                      _clearFieldError('demographicSum');
+                    },
+                    onAgeAddFieldChanged: () {
+                      if (_ageAddError != null) setState(() => _ageAddError = null);
+                    },
+                    onRemoveAgeRow: (int groupIndex, int ageRowIndex) {
+                      setState(() {
+                        _groups[groupIndex].ageRows.removeAt(ageRowIndex);
+                      });
+                      _clearFieldError('demographicSum');
+                    },
+                    onAgeCountChanged: (int groupIndex, int ageRowIndex, String sex, int value) {
+                      final row = _groups[groupIndex].ageRows[ageRowIndex];
+                      if (sex == 'male') {
+                        row.male = value;
+                      } else {
+                        row.female = value;
+                      }
+                      setState(() {});
                       _clearFieldError('demographicSum');
                     },
                   ),
@@ -1145,24 +1224,42 @@ class _StayInfoCard extends StatelessWidget {
 
 class _DemographicCard extends StatelessWidget {
   const _DemographicCard({
-    required this.rows,
+    required this.groups,
     required this.total,
     required this.currentSum,
     required this.errors,
-    required this.rowErrors,
-    required this.onAddRow,
-    required this.onRemoveRow,
-    required this.onRowChanged,
+    required this.groupErrors,
+    required this.pendingAgeGroup,
+    required this.pendingMaleCtrl,
+    required this.pendingFemaleCtrl,
+    required this.ageAddError,
+    required this.onAddGroup,
+    required this.onRemoveGroup,
+    required this.onGroupChanged,
+    required this.onAgeGroupChanged,
+    required this.onAddAgeRow,
+    required this.onRemoveAgeRow,
+    required this.onAgeAddFieldChanged,
+    required this.onAgeCountChanged,
   });
 
-  final List<DemographicRow> rows;
+  final List<GuestGroup> groups;
   final int total;
   final int currentSum;
   final Map<String, String?> errors;
-  final List<Map<String, String?>> rowErrors;
-  final VoidCallback onAddRow;
-  final ValueChanged<int> onRemoveRow;
-  final void Function(int rowIndex, String fieldKey) onRowChanged;
+  final List<Map<String, String?>> groupErrors;
+  final String? pendingAgeGroup;
+  final TextEditingController pendingMaleCtrl;
+  final TextEditingController pendingFemaleCtrl;
+  final String? ageAddError;
+  final VoidCallback onAddGroup;
+  final ValueChanged<int> onRemoveGroup;
+  final void Function(int groupIndex, String fieldKey) onGroupChanged;
+  final ValueChanged<String?> onAgeGroupChanged;
+  final ValueChanged<int> onAddAgeRow;
+  final void Function(int groupIndex, int ageRowIndex) onRemoveAgeRow;
+  final VoidCallback onAgeAddFieldChanged;
+  final void Function(int groupIndex, int ageRowIndex, String sex, int value) onAgeCountChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1171,410 +1268,402 @@ class _DemographicCard extends StatelessWidget {
     final sumColor = currentSum == 0
         ? AppColors.textGray
         : sumMatch
-        ? const Color(0xFF00C48C)
-        : AppColors.accentRed;
+            ? const Color(0xFF00C48C)
+            : AppColors.accentRed;
     final sumError = errors['demographicSum'];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final useCompactLayout = constraints.maxWidth < 900;
-
-        return _SectionCard(
-          title: 'Guest Demographic Breakdown',
-          subtitle: 'Must sum to $totalLabel total guests',
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '$currentSum / $totalLabel',
-                style: TextStyle(
-                  color: sumColor,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+    return _SectionCard(
+      title: 'Guest Demographic Breakdown',
+      subtitle: 'Must sum to $totalLabel total guests',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$currentSum / $totalLabel',
+            style: TextStyle(
+              color: sumColor,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          child: Column(
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (sumError != null) ...[
+            const SizedBox(height: 4),
+            _InlineError(message: sumError),
+            const SizedBox(height: 10),
+          ],
+
+          ...List.generate(groups.length, (i) {
+            final g = groups[i];
+            final gErr = i < groupErrors.length
+                ? groupErrors[i]
+                : <String, String?>{};
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _GuestGroupCard(
+                group: g,
+                groupIndex: i,
+                groupErrors: gErr,
+                canDelete: groups.length > 1,
+                pendingAgeGroup: pendingAgeGroup,
+                pendingMaleCtrl: pendingMaleCtrl,
+                pendingFemaleCtrl: pendingFemaleCtrl,
+                ageAddError: ageAddError,
+                onDelete: () => onRemoveGroup(i),
+                onChanged: (fk) => onGroupChanged(i, fk),
+                onAgeGroupChanged: onAgeGroupChanged,
+                onAddAgeRow: () => onAddAgeRow(i),
+                onRemoveAgeRow: (ai) => onRemoveAgeRow(i, ai),
+                onAgeAddFieldChanged: onAgeAddFieldChanged,
+                onAgeCountChanged: (ai, sex, v) =>
+                    onAgeCountChanged(i, ai, sex, v),
+              ),
+            );
+          }),
+
+          const SizedBox(height: 8),
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (sumError != null) ...[
-                const SizedBox(height: 4),
-                _InlineError(message: sumError),
-                const SizedBox(height: 10),
-              ],
-
-              ...List.generate(rows.length, (i) {
-                final row = rows[i];
-                final rErr = i < rowErrors.length
-                    ? rowErrors[i]
-                    : <String, String?>{};
-                final isPhilippines =
-                    !row.isOverseas && row.country == 'Philippines';
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: useCompactLayout
-                      ? _MobileDemoRow(
-                          row: row,
-                          isPhilippines: isPhilippines,
-                          showDelete: rows.length > 1,
-                          rowErrors: rErr,
-                          onDelete: () => onRemoveRow(i),
-                          onChanged: (fieldKey) => onRowChanged(i, fieldKey),
-                        )
-                      : _DesktopDemoRow(
-                          row: row,
-                          isPhilippines: isPhilippines,
-                          showDelete: rows.length > 1,
-                          rowErrors: rErr,
-                          onDelete: () => onRemoveRow(i),
-                          onChanged: (fieldKey) => onRowChanged(i, fieldKey),
-                        ),
-                );
-              }),
-
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Icon(
-                    Icons.lightbulb_outline,
-                    color: Color(0xFFD4A017),
-                    size: 13,
+            children: const [
+              Icon(Icons.lightbulb_outline, color: Color(0xFFD4A017), size: 13),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Add one group per guest origin (country, nationality, region — or "Overseas Filipino"). '
+                  'Inside each group, add only the age brackets that actually apply — pick an age group, enter the Male/Female counts, and hit Add.',
+                  style: TextStyle(
+                    color: AppColors.textSubtle,
+                    fontSize: 11,
+                    height: 1.5,
                   ),
-                  SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Each row represents a unique combination of country, nationality, region, sex, and age group. '
-                      'Toggle "Overseas" for guests with no fixed country. Add multiple rows to cover all guest segments.',
-                      style: TextStyle(
-                        color: AppColors.textSubtle,
-                        fontSize: 11,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _AddRowButton(onTap: onAddRow),
+                ),
               ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: _AddGroupButton(onTap: onAddGroup),
+          ),
+        ],
+      ),
     );
   }
 }
 
-// ─── Desktop Demographic Row ──────────────────────────────────────────────────
+// ─── Guest Group Card ─────────────────────────────────────────────────────────
 
-class _DesktopDemoRow extends StatelessWidget {
-  const _DesktopDemoRow({
-    required this.row,
-    required this.isPhilippines,
-    required this.showDelete,
-    required this.rowErrors,
+class _GuestGroupCard extends StatelessWidget {
+  const _GuestGroupCard({
+    required this.group,
+    required this.groupIndex,
+    required this.groupErrors,
+    required this.canDelete,
+    required this.pendingAgeGroup,
+    required this.pendingMaleCtrl,
+    required this.pendingFemaleCtrl,
+    required this.ageAddError,
     required this.onDelete,
     required this.onChanged,
+    required this.onAgeGroupChanged,
+    required this.onAddAgeRow,
+    required this.onRemoveAgeRow,
+    required this.onAgeAddFieldChanged,
+    required this.onAgeCountChanged,
   });
 
-  final DemographicRow row;
-  final bool isPhilippines;
-  final bool showDelete;
-  final Map<String, String?> rowErrors;
+  final GuestGroup group;
+  final int groupIndex;
+  final Map<String, String?> groupErrors;
+  final bool canDelete;
+  final String? pendingAgeGroup;
+  final TextEditingController pendingMaleCtrl;
+  final TextEditingController pendingFemaleCtrl;
+  final String? ageAddError;
   final VoidCallback onDelete;
   final ValueChanged<String> onChanged;
+  final ValueChanged<String?> onAgeGroupChanged;
+  final VoidCallback onAddAgeRow;
+  final void Function(int ageRowIndex) onRemoveAgeRow;
+  final VoidCallback onAgeAddFieldChanged;
+  final void Function(int ageRowIndex, String sex, int value) onAgeCountChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Tooltip(
-          message: 'Filipino guest living overseas',
-          child: SizedBox(
-            height: _kFieldHeight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Checkbox(
-                  value: row.isOverseas,
-                  onChanged: (v) {
-                    row.isOverseas = v ?? false;
-                    if (row.isOverseas) {
-                      row.country = null;
-                      row.nationality = null;
-                      row.region = null;
-                    }
-                    onChanged('isOverseas');
-                  },
-                  activeColor: const Color(0xFF3B82F6),
-                  side: const BorderSide(color: AppColors.textGray, width: 1.4),
-                  visualDensity: VisualDensity.compact,
-                ),
-                const Text(
-                  'Overseas Fil.',
-                  style: TextStyle(color: AppColors.textGray, fontSize: 11.5),
-                ),
-              ],
-            ),
-          ),
-        ),
+    final hasIssue = groupErrors.containsKey('country') ||
+        groupErrors.containsKey('nationality') ||
+        groupErrors.containsKey('duplicate') ||
+        groupErrors.containsKey('ageRows');
 
-        const SizedBox(width: 8),
-
-        Expanded(
-          flex: 3,
-          child: _CompactDropWithError(
-            errorText: rowErrors['country'],
-            child: _CompactDrop(
-              hint: row.isOverseas ? 'N/A (Overseas)' : 'Country',
-              value: row.isOverseas ? null : row.country,
-              items: _countryOptions,
-              enabled: !row.isOverseas,
-              onChanged: (v) {
-                row.country = v;
-                if (v != 'Philippines') {
-                  row.nationality = null;
-                  row.region = null;
-                }
-                onChanged('country');
-              },
-            ),
-          ),
-        ),
-
-        if (isPhilippines) ...[
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 2,
-            child: _CompactDropWithError(
-              errorText: rowErrors['nationality'],
-              child: _CompactDrop(
-                hint: 'Nationality',
-                value: row.nationality,
-                items: _nationalityOptions,
-                onChanged: (v) {
-                  row.nationality = v;
-                  onChanged('nationality');
-                },
-              ),
-            ),
-          ),
-        ],
-
-        if (isPhilippines) ...[
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 3,
-            child: _CompactDropWithError(
-              errorText: rowErrors['region'],
-              child: _CompactDrop(
-                hint: 'Region',
-                value: row.region,
-                items: _regionOptions,
-                onChanged: (v) {
-                  row.region = v;
-                  onChanged('region');
-                },
-              ),
-            ),
-          ),
-        ],
-
-        const SizedBox(width: 8),
-
-        Expanded(
-          flex: 2,
-          child: _CompactDropWithError(
-            errorText: rowErrors['sex'],
-            child: _CompactDrop(
-              hint: 'Sex',
-              value: row.sex,
-              items: _sexOptions,
-              onChanged: (v) {
-                row.sex = v;
-                onChanged('sex');
-              },
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-
-        Expanded(
-          flex: 2,
-          child: _CompactDropWithError(
-            errorText: rowErrors['ageGroup'],
-            child: _CompactDrop(
-              hint: 'Age Group',
-              value: row.ageGroup,
-              items: _ageGroupOptions,
-              onChanged: (v) {
-                row.ageGroup = v;
-                onChanged('ageGroup');
-              },
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-
-        SizedBox(
-          width: 60,
-          child: _CompactDropWithError(
-            errorText: rowErrors['count'],
-            child: _CompactCountField(
-              controller: row.countCtrl,
-              hasError: rowErrors['count'] != null,
-              onChanged: (_) => onChanged('count'),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-
-        SizedBox(
-          width: 20,
-          child: showDelete
-              ? GestureDetector(
-                  onTap: onDelete,
-                  child: const Icon(
-                    Icons.delete_rounded,
-                    color: AppColors.accentRed,
-                    size: 16,
-                  ),
-                )
-              : const SizedBox.shrink(),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Mobile Demographic Row ───────────────────────────────────────────────────
-
-class _MobileDemoRow extends StatelessWidget {
-  const _MobileDemoRow({
-    required this.row,
-    required this.isPhilippines,
-    required this.showDelete,
-    required this.rowErrors,
-    required this.onDelete,
-    required this.onChanged,
-  });
-
-  final DemographicRow row;
-  final bool isPhilippines;
-  final bool showDelete;
-  final Map<String, String?> rowErrors;
-  final VoidCallback onDelete;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.backgroundDark,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(11),
         border: Border.all(
-          color: rowErrors.isNotEmpty
-              ? AppColors.accentRed.withOpacity(0.5)
+          color: hasIssue
+              ? AppColors.accentRed.withOpacity(0.45)
               : AppColors.cardBorder,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GestureDetector(
-            onTap: () {
-              row.isOverseas = !row.isOverseas;
-              if (row.isOverseas) {
-                row.country = null;
-                row.nationality = null;
-                row.region = null;
-              }
-              onChanged('isOverseas');
-            },
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: Checkbox(
-                    value: row.isOverseas,
-                    onChanged: (v) {
-                      row.isOverseas = v ?? false;
-                      if (row.isOverseas) {
-                        row.country = null;
-                        row.nationality = null;
-                        row.region = null;
-                      }
-                      onChanged('isOverseas');
-                    },
-                    activeColor: const Color(0xFF3B82F6),
-                    side: const BorderSide(
-                      color: Color(0xFF6B7280),
-                      width: 1.4,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Overseas Fil.',
-                  style: TextStyle(color: AppColors.textGray, fontSize: 12),
-                ),
-                const Spacer(),
-                if (showDelete)
-                  GestureDetector(
-                    onTap: onDelete,
-                    child: const Icon(
-                      Icons.delete_rounded,
-                      color: AppColors.accentRed,
-                      size: 16,
-                    ),
-                  ),
-              ],
-            ),
+          // ── Group header: overseas checkbox + origin fields + delete ──
+          _GroupHeader(
+            group: group,
+            groupIndex: groupIndex,
+            canDelete: canDelete,
+            groupErrors: groupErrors,
+            onDelete: onDelete,
+            onChanged: onChanged,
           ),
 
-          const SizedBox(height: 10),
-
-          _CompactDropWithError(
-            errorText: rowErrors['country'],
-            child: _CompactDrop(
-              hint: row.isOverseas ? 'N/A (Overseas)' : 'Country',
-              value: row.isOverseas ? null : row.country,
-              items: _countryOptions,
-              enabled: !row.isOverseas,
-              onChanged: (v) {
-                row.country = v;
-                if (v != 'Philippines') {
-                  row.nationality = null;
-                  row.region = null;
-                }
-                onChanged('country');
-              },
-            ),
-          ),
-
-          if (isPhilippines) ...[
+          if (groupErrors['duplicate'] != null) ...[
             const SizedBox(height: 8),
-            Row(
-              children: [
+            _InlineError(message: groupErrors['duplicate']!),
+          ],
+          if (groupErrors['ageRows'] != null) ...[
+            const SizedBox(height: 8),
+            _InlineError(message: groupErrors['ageRows']!),
+          ],
+
+          // ── Age breakdown section ──────────────────────────────────
+          const SizedBox(height: 14),
+          const Text(
+            'AGE BREAKDOWN',
+            style: TextStyle(
+              color: AppColors.textGray,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.03,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // ── Add age row control ──
+          _AgeAddControl(
+            groupIndex: groupIndex,
+            group: group,
+            pendingAgeGroup: pendingAgeGroup,
+            maleCtrl: pendingMaleCtrl,
+            femaleCtrl: pendingFemaleCtrl,
+            ageAddError: ageAddError,
+            onAgeGroupChanged: onAgeGroupChanged,
+            onAddAgeRow: onAddAgeRow,
+            onFieldChanged: onAgeAddFieldChanged,
+          ),
+
+          // ── Age breakdown table ──
+          if (group.ageRows.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _AgeBreakdownTable(
+              ageRows: group.ageRows,
+              groupIndex: groupIndex,
+              onRemoveAgeRow: onRemoveAgeRow,
+              onCountChanged: onAgeCountChanged,
+            ),
+          ] else ...[
+            const SizedBox(height: 10),
+            const Text(
+              'No age groups added yet — use the control above to add headcounts.',
+              style: TextStyle(
+                color: AppColors.textSubtle,
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Group Header ─────────────────────────────────────────────────────────────
+
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({
+    required this.group,
+    required this.groupIndex,
+    required this.canDelete,
+    required this.groupErrors,
+    required this.onDelete,
+    required this.onChanged,
+  });
+
+  final GuestGroup group;
+  final int groupIndex;
+  final bool canDelete;
+  final Map<String, String?> groupErrors;
+  final VoidCallback onDelete;
+  final ValueChanged<String> onChanged;
+
+  bool get _isPhilippines =>
+      !group.isOverseas && group.country == 'Philippines';
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Row 1: Overseas checkbox + delete
+        Row(
+          children: [
+            GestureDetector(
+              onTap: () {
+                group.isOverseas = !group.isOverseas;
+                if (group.isOverseas) {
+                  group.country = null;
+                  group.nationality = null;
+                  group.region = null;
+                }
+                onChanged('isOverseas');
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: Checkbox(
+                      value: group.isOverseas,
+                      onChanged: (v) {
+                        group.isOverseas = v ?? false;
+                        if (group.isOverseas) {
+                          group.country = null;
+                          group.nationality = null;
+                          group.region = null;
+                        }
+                        onChanged('isOverseas');
+                      },
+                      activeColor: const Color(0xFF3B82F6),
+                      side: const BorderSide(
+                          color: AppColors.textGray, width: 1.4),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Overseas Filipino',
+                    style: TextStyle(color: AppColors.textGray, fontSize: 11.5),
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            if (canDelete)
+              GestureDetector(
+                onTap: onDelete,
+                child: const Icon(Icons.delete_rounded,
+                    color: AppColors.accentRed, size: 16),
+              ),
+          ],
+        ),
+
+        const SizedBox(height: 10),
+
+        // Row 2: Origin fields
+        if (isMobile)
+          Column(
+            children: [
+              _CompactDropWithError(
+                errorText: groupErrors['country'],
+                child: _CompactDrop(
+                  hint: group.isOverseas ? 'N/A (Overseas)' : 'Country',
+                  value: group.isOverseas ? null : group.country,
+                  items: _countryOptions,
+                  enabled: !group.isOverseas,
+                  onChanged: (v) {
+                    group.country = v;
+                    if (v != 'Philippines') {
+                      group.nationality = null;
+                      group.region = null;
+                    }
+                    onChanged('country');
+                  },
+                ),
+              ),
+              if (_isPhilippines) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _CompactDropWithError(
+                        errorText: groupErrors['nationality'],
+                        child: _CompactDrop(
+                          hint: 'Nationality',
+                          value: group.nationality,
+                          items: _nationalityOptions,
+                          onChanged: (v) {
+                            group.nationality = v;
+                            onChanged('nationality');
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _CompactDropWithError(
+                        errorText: null,
+                        child: _CompactDrop(
+                          hint: 'Region',
+                          value: group.region,
+                          items: _regionOptions,
+                          onChanged: (v) {
+                            group.region = v;
+                            onChanged('region');
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: _CompactDropWithError(
+                  errorText: groupErrors['country'],
+                  child: _CompactDrop(
+                    hint: group.isOverseas ? 'N/A (Overseas)' : 'Country',
+                    value: group.isOverseas ? null : group.country,
+                    items: _countryOptions,
+                    enabled: !group.isOverseas,
+                    onChanged: (v) {
+                      group.country = v;
+                      if (v != 'Philippines') {
+                        group.nationality = null;
+                        group.region = null;
+                      }
+                      onChanged('country');
+                    },
+                  ),
+                ),
+              ),
+              if (_isPhilippines) ...[
+                const SizedBox(width: 8),
                 Expanded(
+                  flex: 2,
                   child: _CompactDropWithError(
-                    errorText: rowErrors['nationality'],
+                    errorText: groupErrors['nationality'],
                     child: _CompactDrop(
                       hint: 'Nationality',
-                      value: row.nationality,
+                      value: group.nationality,
                       items: _nationalityOptions,
                       onChanged: (v) {
-                        row.nationality = v;
+                        group.nationality = v;
                         onChanged('nationality');
                       },
                     ),
@@ -1582,72 +1671,452 @@ class _MobileDemoRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
+                  flex: 3,
                   child: _CompactDropWithError(
-                    errorText: rowErrors['region'],
+                    errorText: null,
                     child: _CompactDrop(
                       hint: 'Region',
-                      value: row.region,
+                      value: group.region,
                       items: _regionOptions,
                       onChanged: (v) {
-                        row.region = v;
+                        group.region = v;
                         onChanged('region');
                       },
                     ),
                   ),
                 ),
               ],
-            ),
-          ],
+            ],
+          ),
+      ],
+    );
+  }
+}
 
-          const SizedBox(height: 8),
+// ─── Age Add Control ──────────────────────────────────────────────────────────
 
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+class _AgeAddControl extends StatelessWidget {
+  const _AgeAddControl({
+    required this.groupIndex,
+    required this.group,
+    required this.pendingAgeGroup,
+    required this.maleCtrl,
+    required this.femaleCtrl,
+    required this.ageAddError,
+    required this.onAgeGroupChanged,
+    required this.onAddAgeRow,
+    required this.onFieldChanged,
+  });
+
+  final int groupIndex;
+  final GuestGroup group;
+  final String? pendingAgeGroup;
+  final TextEditingController maleCtrl;
+  final TextEditingController femaleCtrl;
+  final String? ageAddError;
+  final ValueChanged<String?> onAgeGroupChanged;
+  final VoidCallback onAddAgeRow;
+  final VoidCallback onFieldChanged;
+
+  List<String> get _availableAges {
+    final used = group.ageRows.map((r) => r.ageGroup).toSet();
+    return _ageGroupOptions.where((a) => !used.contains(a)).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_availableAges.isEmpty) {
+      return const Text(
+        'All age groups have been added for this group.',
+        style: TextStyle(
+          color: AppColors.textSubtle,
+          fontSize: 12,
+          fontStyle: FontStyle.italic,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: AppColors.cardBorder),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: _CompactDropWithError(
-                  errorText: rowErrors['sex'],
-                  child: _CompactDrop(
-                    hint: 'Sex',
-                    value: row.sex,
-                    items: _sexOptions,
-                    onChanged: (v) {
-                      row.sex = v;
-                      onChanged('sex');
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _CompactDropWithError(
-                  errorText: rowErrors['ageGroup'],
-                  child: _CompactDrop(
-                    hint: 'Age Group',
-                    value: row.ageGroup,
-                    items: _ageGroupOptions,
-                    onChanged: (v) {
-                      row.ageGroup = v;
-                      onChanged('ageGroup');
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
               SizedBox(
-                width: 64,
-                child: _CompactDropWithError(
-                  errorText: rowErrors['count'],
-                  child: _CompactCountField(
-                    controller: row.countCtrl,
-                    hasError: rowErrors['count'] != null,
-                    onChanged: (_) => onChanged('count'),
+                width: double.infinity,
+                height: 36,
+                child: _CompactDrop(
+                  hint: 'Select age group',
+                  value: _availableAges.contains(pendingAgeGroup)
+                      ? pendingAgeGroup
+                      : null,
+                  items: _availableAges,
+                  onChanged: onAgeGroupChanged,
+                ),
+              ),
+              SizedBox(
+                width: 70,
+                height: 36,
+                child: TextField(
+                  controller: maleCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  textAlign: TextAlign.center,
+                  onChanged: (_) => onFieldChanged(),
+                  style: const TextStyle(color: _kInputText, fontSize: 12.5),
+                  decoration: InputDecoration(
+                    hintText: 'Male',
+                    hintStyle: const TextStyle(color: _kInputHint, fontSize: 11.5),
+                    filled: true,
+                    fillColor: _kInputFill,
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(color: _kInputBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(color: _kInputBorder),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(7)),
+                      borderSide: BorderSide(color: _kInputFocused, width: 1.4),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 70,
+                height: 36,
+                child: TextField(
+                  controller: femaleCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  textAlign: TextAlign.center,
+                  onChanged: (_) => onFieldChanged(),
+                  style: const TextStyle(color: _kInputText, fontSize: 12.5),
+                  decoration: InputDecoration(
+                    hintText: 'Female',
+                    hintStyle: const TextStyle(color: _kInputHint, fontSize: 11.5),
+                    filled: true,
+                    fillColor: _kInputFill,
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(color: _kInputBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(color: _kInputBorder),
+                    ),
+                    focusedBorder: const OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(7)),
+                      borderSide: BorderSide(color: _kInputFocused, width: 1.4),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: 36,
+                child: ElevatedButton(
+                  onPressed: onAddAgeRow,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3B82F6),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(7)),
+                  ),
+                  child: const Text(
+                    '+ Add',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
             ],
           ),
+        ),
+        if (ageAddError != null) ...[
+          const SizedBox(height: 6),
+          _InlineError(message: ageAddError!),
         ],
+      ],
+    );
+  }
+}
+
+// ─── Age Breakdown Table ──────────────────────────────────────────────────────
+
+class _AgeBreakdownTable extends StatelessWidget {
+  const _AgeBreakdownTable({
+    required this.ageRows,
+    required this.groupIndex,
+    required this.onRemoveAgeRow,
+    required this.onCountChanged,
+  });
+
+  final List<AgeGroupRow> ageRows;
+  final int groupIndex;
+  final void Function(int ageRowIndex) onRemoveAgeRow;
+  final void Function(int ageRowIndex, String sex, int value) onCountChanged;
+
+  static Widget _buildCountField({
+    required int value,
+    required ValueChanged<String> onChanged,
+  }) {
+    return SizedBox(
+      width: 42,
+      height: 30,
+      child: TextField(
+        key: ValueKey(value),
+        controller: TextEditingController(text: value == 0 ? '' : '$value'),
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        textAlign: TextAlign.center,
+        onChanged: onChanged,
+        style: const TextStyle(
+            color: _kInputText, fontSize: 12.5, fontWeight: FontWeight.w600),
+        decoration: InputDecoration(
+          hintText: '0',
+          hintStyle: const TextStyle(color: _kInputHint, fontSize: 12),
+          filled: true,
+          fillColor: _kInputFill,
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: _kInputBorder),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: _kInputBorder),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(6)),
+            borderSide: BorderSide(color: _kInputFocused, width: 1.4),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groupTotal =
+        ageRows.fold(0, (sum, r) => sum + r.male + r.female);
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.cardBorder.withOpacity(0.3),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(9)),
+            ),
+            child: Row(
+              children: [
+                const Expanded(
+                    flex: 3,
+                    child: Text('AGE GROUP',
+                        style: TextStyle(
+                            color: AppColors.textSubtle,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.04))),
+                const Expanded(
+                    flex: 2,
+                    child: Text('M',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: AppColors.textSubtle,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.04))),
+                const Expanded(
+                    flex: 2,
+                    child: Text('F',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: AppColors.textSubtle,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.04))),
+                const Expanded(
+                    flex: 2,
+                    child: Text('TOTAL',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: AppColors.textSubtle,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.04))),
+                const SizedBox(width: 24),
+              ],
+            ),
+          ),
+
+          // Rows
+          ...List.generate(ageRows.length, (i) {
+            final r = ageRows[i];
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border(
+                    bottom: BorderSide(
+                        color: AppColors.cardBorder.withOpacity(0.5))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                      flex: 3,
+                      child: Text(r.ageGroup,
+                          style: const TextStyle(
+                              color: AppColors.textGray, fontSize: 12))),
+                  Expanded(
+                    flex: 2,
+                    child: _buildCountField(
+                      value: r.male,
+                      onChanged: (v) =>
+                          onCountChanged(i, 'male', int.tryParse(v) ?? 0),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: _buildCountField(
+                      value: r.female,
+                      onChanged: (v) =>
+                          onCountChanged(i, 'female', int.tryParse(v) ?? 0),
+                    ),
+                  ),
+                  Expanded(
+                      flex: 2,
+                      child: Text('${r.total}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: AppColors.textSubtle,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600))),
+                  SizedBox(
+                    width: 24,
+                    child: GestureDetector(
+                      onTap: () => onRemoveAgeRow(i),
+                      child: const Icon(Icons.delete_outline_rounded,
+                          color: AppColors.accentRed, size: 15),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          // Footer total
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: AppColors.cardBorder.withOpacity(0.2),
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(9)),
+            ),
+            child: Row(
+              children: [
+                const Expanded(
+                    flex: 3,
+                    child: Text('Group Total',
+                        style: TextStyle(
+                            color: AppColors.textWhite,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700))),
+                const Expanded(flex: 2, child: SizedBox()),
+                const Expanded(flex: 2, child: SizedBox()),
+                Expanded(
+                    flex: 2,
+                    child: Text('$groupTotal',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            color: AppColors.primaryCyan,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700))),
+                const SizedBox(width: 24),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Add Group Button ─────────────────────────────────────────────────────────
+
+class _AddGroupButton extends StatelessWidget {
+  const _AddGroupButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.12),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add, color: Colors.white, size: 16),
+              SizedBox(width: 7),
+              Text(
+                'Add Guest Group',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1864,57 +2333,6 @@ class _InlineError extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-// ─── Add Row Button ───────────────────────────────────────────────────────────
-
-class _AddRowButton extends StatelessWidget {
-  const _AddRowButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.12),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.add, color: Colors.white, size: 16),
-              SizedBox(width: 8),
-              Text(
-                'Add Row',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -2212,58 +2630,6 @@ class _CompactDrop extends StatelessWidget {
                 ),
               )
               .toList(),
-        ),
-      ),
-    );
-  }
-}
-
-class _CompactCountField extends StatelessWidget {
-  const _CompactCountField({
-    required this.controller,
-    required this.onChanged,
-    this.hasError = false,
-  });
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final bool hasError;
-
-  @override
-  Widget build(BuildContext context) {
-    final borderColor = hasError ? AppColors.accentRed : _kInputBorder;
-    return SizedBox(
-      height: _kFieldHeight,
-      child: TextField(
-        controller: controller,
-        keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        textAlign: TextAlign.center,
-        style: const TextStyle(color: _kInputText, fontSize: 13),
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          hintText: '0',
-          hintStyle: const TextStyle(color: _kInputHint, fontSize: 12.5),
-          filled: true,
-          fillColor: hasError
-              ? AppColors.accentRed.withOpacity(0.04)
-              : _kInputFill,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 6,
-            vertical: 11,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(7),
-            borderSide: BorderSide(color: borderColor),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(7),
-            borderSide: BorderSide(color: borderColor),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(7),
-            borderSide: const BorderSide(color: _kInputFocused, width: 1.4),
-          ),
         ),
       ),
     );
